@@ -61,7 +61,7 @@
         "cdoctest.testRunArgPattern": {
           "description": "Test run argument pattern for cdoctest",
           "type": "string",
-          "default": "cdoctest --cdt_cmake_build_path=${buildDirectory} --cdt_cmake_target=${target} --cdt_run_testcase=${test_full_name}"
+          "default": "cdoctest --cdt_cmake_build_path=${buildDirectory} --cdt_cmake_target=${target} --cdt_run_testcase=${test_full_name} --cdt_output_xml=${resultFile}"
         },
         "cdoctest.listTestArgPattern": {
           "description": "List test argument pattern for cdoctest",
@@ -79,7 +79,12 @@
           "default": "--list-tests"
         },
         "cdoctest.resultFile": {
-          "description": "Result file",
+          "description": "Result file for cdoctest",
+          "type": "string",
+          "default": "${buildDirectory}/cdoctest_output.vsc"
+        },
+        "cdoctest.exe_resultFile": {
+          "description": "Result file for executable",
           "type": "string",
           "default": "${buildDirectory}/output.vsc"
         },

@@ -10,3 +10,4 @@ out/
 # Optional: distribution builds, logs, etc.
 dist/
 coverage/
+**/build/*
