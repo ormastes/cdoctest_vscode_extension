@@ -1,0 +1,134 @@
+{
+  "name": "cdoc-test",
+  "displayName": "cdoc_test",
+  "description": "Run cdoct_test and executable tc runner.",
+  "version": "0.0.1",
+  "repository": "https://github.com/ormastes/cdoctest_vscode_extension",
+  "engines": {
+    "vscode": "^1.97.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test",
+    "clean": "rimraf out *.vsix",
+    "build": "tsc",
+    "rebuild": "npm run clean && npm run build",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "dependencies": {
+    "tslib": "^1.9.3",
+    "vscode-cmake-tools": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.97.0",
+    "@typescript-eslint/eslint-plugin": "^8.22.0",
+    "@typescript-eslint/parser": "^8.22.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "eslint": "^9.19.0",
+    "typescript": "^5.7.3"
+  },
+  "extensionDependencies": [],
+  "contributes": {
+    "configuration": {
+      "type": "object",
+      "title": "cdoctest Test Explorer configuration",
+      "properties": {
+        "cdoctest.useCmakeTarget": {
+          "description": "Use cmake target to run tests",
+          "type": "boolean",
+          "default": true
+        },
+        "cdoctest.pythonExePath": {
+          "description": "Path to python executable. Required",
+          "type": "string",
+          "default": ""
+        },
+        "cdoctest.testRunArgPattern": {
+          "description": "Test run argument pattern for cdoctest",
+          "type": "string",
+          "default": "cdoctest --cdt_cmake_build_path=${buildDirectory} --cdt_cmake_target=${target} --cdt_run_testcase=${test_full_name}"
+        },
+        "cdoctest.listTestArgPattern": {
+          "description": "List test argument pattern for cdoctest",
+          "type": "string",
+          "default": "cdoctest --cdt_cmake_build_path=${buildDirectory} --cdt_cmake_target=${target} --cdt_list_testcase"
+        },
+        "cdoctest.exe_testRunArgPattern": {
+          "description": "Test run argument pattern for executable",
+          "type": "string",
+          "default": "--test ${test_full_name}"
+        },
+        "cdoctest.exe_listTestArgPattern": {
+          "description": "List test argument pattern for executable",
+          "type": "string",
+          "default": "--list-tests"
+        },
+        "cdoctest.resultFile": {
+          "description": "Result file",
+          "type": "string",
+          "default": "${buildDirectory}/output.vsc"
+        },
+        "cdoctest.resultSuccessRgex": {
+          "description": "Result success regex",
+          "type": "string",
+          "default": "failedtests=\"0\""
+        },
+        "cdoctest.srcDirectory": {
+          "description": "Source directory",
+          "type": "string",
+          "default": ""
+        },
+        "cdoctest.buildDirectory": {
+          "description": "Build directory",
+          "type": "string",
+          "default": ""
+        },
+        "cdoctest.executable": {
+          "description": "Executable",
+          "type": "string",
+          "default": ""
+        },
+        "cdoctest.exe_executable": {
+          "description": "Executable for executable",
+          "type": "string",
+          "default": ""
+        },
+        "cdoctest.testRunUseFile": {
+          "description": "Use file to run tests",
+          "type": "boolean",
+          "default": true
+        },
+        "cdoctest.listTestUseFile": {
+          "description": "Use file to list tests",
+          "type": "boolean",
+          "default": false
+        },
+        "cdoctest.exe_testRunUseFile": {
+          "description": "Use file to run tests for executable",
+          "type": "boolean",
+          "default": true
+        },
+        "cdoctest.exe_listTestUseFile": {
+          "description": "Use file to list tests for executable",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  }
+}

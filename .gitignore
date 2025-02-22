@@ -1,0 +1,12 @@
+# Dependency directories
+node_modules/
+
+# Compiled output from TypeScript
+out/
+
+# Test run output (if you use vscode-test)
+.vscode-test/
+
+# Optional: distribution builds, logs, etc.
+dist/
+coverage/
