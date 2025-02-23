@@ -1,0 +1,7 @@
+{
+    ///"cdoctest.useCmakeTarget": false, // default is true
+    "cdoctest.pythonExePath": "C:/Python313/python.exe",
+    "files.associations": {
+        "xstring": "cpp"
+    },
+}

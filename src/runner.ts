@@ -50,8 +50,8 @@ export async function runner(run_args: string[] | undefined, buildDirectory: str
             }
             try {
                 // Trigger the build—without specifying targets, this builds the active target
-                await config.cmakeProject?.build();
-                console.log('Build succeeded!');
+                // not build always... TODO: await config.cmakeProject?.build();
+                // console.log('Build succeeded!');
             } catch (err) {
                 reject(err);
             }

@@ -214,14 +214,9 @@ export class Config {
                     vscode.window.showErrorMessage('CMake Tools API is unavailable. Please install CMake Tools.');
                     return;
                 }
-                cmakeApi.getProject(workspaceFolder.uri).then(project => {
-                    this.cmakeProject = project;
-                });
+                
                 const configBuildTargetDisposable = cmakeApi.onBuildTargetChanged((target) => {
                     this.cmakeTarget = target;
-                    this.cmakeBuildDirectory = "";
-                    this.cmakeSrcDirectory = "";
-                    this.cmakeLaunchTargetPath = "";
                     vscode.commands.executeCommand<string>('cmake.buildDirectory')
                     .then(targetDir => {
                         this.cmakeBuildDirectory = targetDir || "";
@@ -231,17 +226,22 @@ export class Config {
                     .then(targetPath => {
                         this.cmakeLaunchTargetPath = targetPath || "";
                     });
-                    vscode.commands.executeCommand<string>('cmake.sourceDir')
-                    .then(srcDir => {
-                        this.cmakeSrcDirectory = srcDir || "";
-                    });
                 });
                 const configDoneDisposable = cmakeApi.onActiveProjectChanged((projectUri) => {
                     if (projectUri) {
-                        vscode.window.showInformationMessage('CMake configuration is complete!');
-                        ativeWorkspace(this);
+                        cmakeApi.getProject(projectUri).then(project => {
+                            this.cmakeProject = project;
+                            this.cmakeSrcDirectory =  projectUri.fsPath || "";
+                            ativeWorkspace(this);
+                        });
                     }
                 });
+                cmakeApi.getProject(workspaceFolder.uri).then(project => {
+                    this.cmakeProject = project;
+                    this.cmakeSrcDirectory =  workspaceFolder.uri.fsPath || "";
+                    ativeWorkspace(this);
+                });
+                
                 this._disposables.push(configBuildTargetDisposable);
                 this._disposables.push(configDoneDisposable);
             });

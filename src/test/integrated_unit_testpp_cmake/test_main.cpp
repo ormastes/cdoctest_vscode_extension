@@ -37,7 +37,7 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    std::ofstream ofs("test_results.txt");
+    std::ofstream ofs("output.vsc");
     UnitTest::XmlTestReporter reporter(ofs);
     UnitTest::TestRunner runner(reporter);
     int result = -1;
