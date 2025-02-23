@@ -118,6 +118,17 @@ export class Config {
         return this.covert_file_path(this._exe_executable, "exe_executable");
     }
 
+    public async update_exe_executable(): Promise<void> {
+        if (this.useCmakeTarget) {
+            return vscode.commands.executeCommand<string>('cmake.getLaunchTargetPath')
+            .then(targetPath => {
+                this.cmakeLaunchTargetPath = targetPath || "";
+            });
+        } else {
+            return Promise.resolve();
+        }
+    }
+
     public get executable(): string {
         if (this.useCmakeTarget) {
             let targetPath = this.cmakeLaunchTargetPath;
@@ -214,6 +225,7 @@ export class Config {
                     vscode.window.showErrorMessage('CMake Tools API is unavailable. Please install CMake Tools.');
                     return;
                 }
+                
                 
                 const configBuildTargetDisposable = cmakeApi.onBuildTargetChanged((target) => {
                     this.cmakeTarget = target;

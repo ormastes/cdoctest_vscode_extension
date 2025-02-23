@@ -1,15 +1,9 @@
 // src/controller.ts
 import * as vscode from 'vscode';
-import { getWorkspaceTestPatterns, findInitialFiles } from './fileHelper';
-import { spawn, ChildProcess } from 'child_process';
-import { startWatchingWorkspace } from './watchers';
 import { MarkdownFileCoverage } from './coverage';
-import { testData } from './testTree';
 import { Config } from './config';
-import * as readline from 'readline';
 import { runner } from './runner';
-
-
+import { resolveTcListHandler } from './tclist_parser/file_change_listener';
 
 
 export const ctrl = vscode.tests.createTestController('mathTestController', 'Markdown Math');
@@ -17,7 +11,7 @@ let _config: Config | undefined;
 let refreshCancellationSource: vscode.CancellationTokenSource | undefined;
 let runCancellationSource: vscode.CancellationTokenSource | undefined;
 
-export function startTestRun(request: vscode.TestRunRequest, token: vscode.CancellationToken) {
+export async function startTestRun(request: vscode.TestRunRequest, token: vscode.CancellationToken) {
 	if (runCancellationSource === undefined) {
 		return;
 	}
@@ -28,9 +22,20 @@ export function startTestRun(request: vscode.TestRunRequest, token: vscode.Cance
 	// Determine which tests to run. If request.include is not provided,
 	// you may want to run all tests. In this example, we'll assume request.include exists.
 	const testsToRun: vscode.TestItem[] = request.include ? Array.from(request.include) : [];
-  
+	let testCasesToRun : vscode.TestItem[] = [];
+
+	for (const test of testsToRun) {
+		if (test.children.size > 0) {
+			test.children.forEach((value) => {
+				testCasesToRun.push(value);
+			});
+		} else {
+			testCasesToRun.push(test);
+		}
+	}
+
 	// Mark all tests as enqueued
-	testsToRun.forEach(test => run.enqueued(test));
+	testCasesToRun.forEach(test => run.enqueued(test));
   
 	const runTest = async (test: vscode.TestItem): Promise<void> => {
 		if (runCancellationSource?.token.isCancellationRequested) {
@@ -79,10 +84,11 @@ export function startTestRun(request: vscode.TestRunRequest, token: vscode.Cance
 		}
 	  };
 	  
-	  Promise.all(testsToRun.map(test => runTest(test))).then(() => {
-		run.end(); // Now this will be called after all tests have finished.
-	  });
-	  
+	  // Then run tests sequentially:
+	for (const test of testCasesToRun) {
+		await runTest(test);
+ 	 }
+	run.end();
 }
 
 
@@ -123,11 +129,14 @@ export function setupController(
 		if (refreshCancellationSource === undefined) {
 			return;
 		}
-		runner(config.testrun_list_args, config.buildDirectory, config.listTestUseFile, config.resultFile, config, refreshCancellationSource, (result: string) => {
-			// Parse the result string and update the test tree.
-			const lines = result.split('\n');
-
+		config.update_exe_executable().then(() => {
+			runner(config.testrun_list_args, config.buildDirectory, config.listTestUseFile, config.resultFile, config, refreshCancellationSource, (result: string) => {
+				// Parse the result string and update the test tree.
+				const lines = result.split('\n');
+			});
 		});
+
+		
 		
 		const handleTestListLines = (line: string) => {
 			// skip if line does not contain ','
@@ -160,7 +169,7 @@ export function setupController(
             //);
 			let root_item = ctrl.items.get('root-suite');
 			if (!root_item) {
-				root_item = ctrl.createTestItem('root-suite', 'My Test Suite');
+				root_item = ctrl.createTestItem('root-suite', 'CPP Executable Test');
 				root_item.canResolveChildren = true;
 				ctrl.items.add(root_item);
 			}
@@ -188,7 +197,7 @@ export function setupController(
 		runner(config.exe_testrun_list_args, config.buildDirectory, config.exe_listTestUseFile, config.exe_resultFile, config, refreshCancellationSource, (result: string) => {
 			let root_item = ctrl.items.get('root-suite');
 			if (!root_item) {
-				root_item = ctrl.createTestItem('root-suite', 'My Test Suite');
+				root_item = ctrl.createTestItem('root-suite', 'CPP Executable Test');
 				root_item.canResolveChildren = true;
 				ctrl.items.add(root_item);
 			}
@@ -207,17 +216,7 @@ export function setupController(
 
 	};
 
-	// Set resolve handler to update tests when needed.
-	ctrl.resolveHandler = async item => {
-		if (!item) {
-			context.subscriptions.push(...startWatchingWorkspace(ctrl, fileChangedEmitter));
-			return;
-		}
-		const data = testData.get(item);
-		// Dynamically import TestFile to avoid circular dependency issues.
-		const { TestFile } = await import('./testTree.js');
-		if (data instanceof TestFile) {
-			await data.updateFromDisk(ctrl, item);
-		}
-	};
+	// dummy replace resolveTcListHandler 
+	//ctrl.resolveHandler = resolveTcListHandler;
 }
+
