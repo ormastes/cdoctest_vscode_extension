@@ -71,12 +71,12 @@
         "cdoctest.exe_testRunArgPattern": {
           "description": "Test run argument pattern for executable",
           "type": "string",
-          "default": "--test ${test_full_name}"
+          "default": "TC/${test_suite_name}/${test_case_name} output.vsc"
         },
         "cdoctest.exe_listTestArgPattern": {
           "description": "List test argument pattern for executable",
           "type": "string",
-          "default": "--list-tests"
+          "default": "GetTcList:"
         },
         "cdoctest.resultFile": {
           "description": "Result file for cdoctest",
