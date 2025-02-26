@@ -1,7 +1,7 @@
 {
-  "name": "cdoc-test",
-  "displayName": "cdoc_test",
-  "description": "Run cdoct_test and executable tc runner.",
+  "name": "cdoctest",
+  "displayName": "cdoctest",
+  "description": "Run cdocttest and executable tc runner.",
   "version": "0.0.1",
   "repository": "https://github.com/ormastes/cdoctest_vscode_extension",
   "engines": {
@@ -132,6 +132,11 @@
           "description": "Use file to list tests for executable",
           "type": "boolean",
           "default": false
+        },
+        "cdoctest.libPaths": {
+          "description": "Dynamic library paths separated by ';'",
+          "type": "string",
+          "default": ""
         }
       }
     }

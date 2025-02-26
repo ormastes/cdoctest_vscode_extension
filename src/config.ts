@@ -2,6 +2,65 @@
 import * as vscode from 'vscode';
 import { CMakeToolsApi, getCMakeToolsApi, Project, Version } from 'vscode-cmake-tools';
 
+import * as fs from 'fs';
+import * as path from 'path';
+import fg from 'fast-glob';
+
+interface Artifact {
+  path: string;
+}
+
+interface TargetReply {
+  nameOnDisk?: string;
+  artifacts?: Artifact[];
+}
+
+export async function getExecutablePath(buildDir: string, targetName: string): Promise<string | undefined> {
+  // Use posix-style paths (i.e. forward slashes) and replace any backslashes in buildDir
+  const normalizedBuildDir = buildDir.replace(/\\/g, '/');
+  const pattern = path.posix.join(normalizedBuildDir, '.cmake/api/v1/reply', `target-${targetName}-*.json`);
+
+  const files = await fg(pattern);
+  if (files.length === 0) {
+    console.warn(`No CMake reply file found for target "${targetName}" using pattern "${pattern}"`);
+    return undefined;
+  }
+
+  // Pick the first matching reply file.
+  const jsonFile = files[0];
+  let reply: TargetReply;
+  try {
+    const data = await fs.promises.readFile(jsonFile, 'utf8');
+    reply = JSON.parse(data) as TargetReply;
+  } catch (error) {
+    console.error(`Error reading or parsing ${jsonFile}:`, error);
+    return undefined;
+  }
+
+  if (!reply.artifacts || reply.artifacts.length === 0) {
+    console.warn(`No artifacts found in ${jsonFile}`);
+    return undefined;
+  }
+
+  // Normalize the reply's nameOnDisk (if it exists) by replacing any backslashes with forward slashes.
+  const normalizedNameOnDisk = reply.nameOnDisk ? reply.nameOnDisk.replace(/\\/g, '/') : undefined;
+
+  // First, try to find an artifact whose path (normalized) ends with the reply-level nameOnDisk.
+  let execPath: string | undefined = normalizedNameOnDisk
+    ? reply.artifacts.find(artifact => artifact.path.replace(/\\/g, '/').endsWith(normalizedNameOnDisk))?.path
+    : undefined;
+
+  // If not found, fallback to the first artifact whose path (normalized) ends with ".exe" (case insensitive).
+  if (!execPath) {
+    execPath = reply.artifacts.find(artifact =>
+      artifact.path.replace(/\\/g, '/').toLowerCase().endsWith('.exe')
+    )?.path;
+  }
+
+  // Normalize the final path to use forward slashes.
+  return execPath ? execPath.replace(/\\/g, '/') : undefined;
+}
+
 // # test run variable 
 // ${test_suite_name}: Provided from vscode
 // ${test_case_name}: Provided from vscode
@@ -38,6 +97,7 @@ export class Config {
     public listTestUseFile: boolean;
     public exe_testRunUseFile: boolean;
     public exe_listTestUseFile: boolean;
+    public libPaths: string;
 
     private _disposables: vscode.Disposable[] = [];
 
@@ -120,10 +180,12 @@ export class Config {
 
     public async update_exe_executable(): Promise<void> {
         if (this.useCmakeTarget) {
-            return vscode.commands.executeCommand<string>('cmake.getLaunchTargetPath')
-            .then(targetPath => {
-                this.cmakeLaunchTargetPath = targetPath || "";
-            });
+            return getExecutablePath(this.cmakeBuildDirectory, this.cmakeTarget)
+                        .then(targetPath => {
+                            if (targetPath !== null) {
+                                this.cmakeLaunchTargetPath = targetPath || "";
+                            }
+                        });
         } else {
             return Promise.resolve();
         }
@@ -192,6 +254,7 @@ export class Config {
         this.listTestUseFile = vscode.workspace.getConfiguration('cdoctest').get('listTestUseFile') as boolean;
         this.exe_testRunUseFile = vscode.workspace.getConfiguration('cdoctest').get('exe_testRunUseFile') as boolean;
         this.exe_listTestUseFile = vscode.workspace.getConfiguration('cdoctest').get('exe_listTestUseFile') as boolean;
+        this.libPaths = vscode.workspace.getConfiguration('cdoctest').get('libPaths') as string;
 
         if (this._pythonExePath === '') {
             throw new Error('cdoctest: pythonExePath must be set');
@@ -232,12 +295,15 @@ export class Config {
                     vscode.commands.executeCommand<string>('cmake.buildDirectory')
                     .then(targetDir => {
                         this.cmakeBuildDirectory = targetDir || "";
+                        getExecutablePath(this.cmakeBuildDirectory, this.cmakeTarget)
+                        .then(targetPath => {
+                            if (targetPath !== null) {
+                                this.cmakeLaunchTargetPath = targetPath || "";
+                            }
+                        });
 
                     });
-                    vscode.commands.executeCommand<string>('cmake.getLaunchTargetPath')
-                    .then(targetPath => {
-                        this.cmakeLaunchTargetPath = targetPath || "";
-                    });
+                    
                 });
                 const configDoneDisposable = cmakeApi.onActiveProjectChanged((projectUri) => {
                     if (projectUri) {

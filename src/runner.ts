@@ -1,8 +1,58 @@
 
 import * as vscode from 'vscode';
-import { spawn, ChildProcess } from 'child_process';
 import { Config } from './config';
 import * as readline from 'readline';
+import { spawn, ChildProcess, SpawnOptions } from 'child_process';
+import * as os from 'os';
+
+/**
+ * Spawns a program while ensuring that the dynamic linker can locate the shared libraries.
+ * Returns the ChildProcess so that the caller can attach event listeners as needed.
+ *
+ * @param program - Path to the executable program.
+ * @param args - Array of arguments to pass to the executable.
+ * @param libPaths - Array of directories (using forward slashes) to add to the dynamic library search paths.
+ * @param additionalOptions - (Optional) Additional spawn options to merge with defaults.
+ * @returns The spawned ChildProcess.
+ */
+export function runProgramWithLibPaths(
+  program: string,
+  args: string[],
+  libPaths: string,
+  additionalOptions?: SpawnOptions
+): ChildProcess {
+  // Clone the current process environment
+  const env = { ...process.env };
+
+  // Depending on the platform, inject the library search path variable.
+  if (os.platform() === 'win32') {
+    // For Windows, modify PATH (use semicolon as separator)
+    const currentPath = env.PATH || '';
+    env.PATH = libPaths + currentPath;
+  } else if (os.platform() === 'linux') {
+    // For Linux, modify LD_LIBRARY_PATH (use colon as separator)
+    const currentLD = env.LD_LIBRARY_PATH || '';
+    libPaths.replaceAll(';', ':');
+    env.LD_LIBRARY_PATH = libPaths + (currentLD ? ':' + currentLD : '');
+  } else if (os.platform() === 'darwin') {
+    // For macOS, modify DYLD_LIBRARY_PATH (use colon as separator)
+    const currentDYLD = env.DYLD_LIBRARY_PATH || '';
+    libPaths.replaceAll(';', ':');
+    env.DYLD_LIBRARY_PATH = libPaths + (currentDYLD ? ':' + currentDYLD : '');
+  }
+
+  // Default spawn options: use our modified environment and inherit stdio.
+  const defaultOptions: SpawnOptions = {
+    env
+  };
+
+  // Merge any additional options passed by the caller
+  const spawnOptions = { ...defaultOptions, ...additionalOptions };
+
+  // Spawn the process and return the ChildProcess to the caller.
+  return spawn(program, args, spawnOptions);
+}
+
 
 export async function fileExists(uri: vscode.Uri): Promise<boolean> {
     try {
@@ -60,9 +110,10 @@ export async function runner(run_args: string[] | undefined, buildDirectory: str
 
         const args = run_args.slice(1);
 
-        const cdocRefreshProcess = spawn(
+        const cdocRefreshProcess = runProgramWithLibPaths(
             executable,
             args,
+            config.libPaths,
             { cwd: buildDirectory, shell: true  }
         );
         if (!cdocRefreshProcess) {
