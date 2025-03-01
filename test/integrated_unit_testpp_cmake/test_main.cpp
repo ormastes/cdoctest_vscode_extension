@@ -26,7 +26,7 @@ SUITE(StringTests) {
 
 int main(int argc, char** argv)
 {
-    if (argc > 1 && std::string(argv[1]) == "--list-tests") {
+    if (argc > 1 && std::string(argv[1]) == "GetTcList:") {
         UnitTest::TestList const& list = UnitTest::Test::GetTestList();
         const UnitTest::Test* test = list.GetHead();
         while (test != nullptr) {
@@ -42,8 +42,8 @@ int main(int argc, char** argv)
     UnitTest::TestRunner runner(reporter);
     int result = -1;
     
-    if (argc > 2 && std::string(argv[1]) == "--test") {
-        std::string test_case = argv[2];
+    if (argc > 2 && std::string(argv[1]).compare(0, 3, "TC/") == 0) {
+        std::string test_case = std::string(argv[1]).substr(3);
         // Define a lambda that returns true only for the selected test
         auto testSelector = [test_case](const UnitTest::Test* test) -> bool {
             std::string fullTestName = std::string(test->m_details.suiteName) + "::" + test->m_details.testName;

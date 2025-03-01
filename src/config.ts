@@ -15,15 +15,28 @@ interface TargetReply {
   artifacts?: Artifact[];
 }
 
-export async function getExecutablePath(buildDir: string, targetName: string): Promise<string | undefined> {
+
+
+export async function getExecutablePath(buildType: string, buildDir: string, targetName: string): Promise<string | undefined> {
   // Use posix-style paths (i.e. forward slashes) and replace any backslashes in buildDir
   const normalizedBuildDir = buildDir.replace(/\\/g, '/');
-  const pattern = path.posix.join(normalizedBuildDir, '.cmake/api/v1/reply', `target-${targetName}-*.json`);
+  const pattern = path.posix.join(normalizedBuildDir, '.cmake/api/v1/reply', `target-${targetName}-*`);
 
-  const files = await fg(pattern);
+
+  let _files = await fg(pattern);
+  let files = _files.filter(file => path.extname(file) === '.json');
   if (files.length === 0) {
     console.warn(`No CMake reply file found for target "${targetName}" using pattern "${pattern}"`);
     return undefined;
+  }
+  if (files.length > 1) {
+    _files = files;
+    files = _files.filter(file => path.basename(file).startsWith(`target-${targetName}-${buildType}-`));
+  }
+  if (files.length === 0) {
+    console.warn(`No CMake reply file found for target "${targetName}" and build type "${buildType}"`);
+    // revert to the original list of
+    files = _files;
   }
 
   // Pick the first matching reply file.
@@ -56,6 +69,11 @@ export async function getExecutablePath(buildDir: string, targetName: string): P
       artifact.path.replace(/\\/g, '/').toLowerCase().endsWith('.exe')
     )?.path;
   }
+
+  // append normalizedBuildDir if execPath is relative
+    if (execPath && !path.isAbsolute(execPath)) {
+        execPath = path.posix.join(normalizedBuildDir, execPath);
+    }
 
   // Normalize the final path to use forward slashes.
   return execPath ? execPath.replace(/\\/g, '/') : undefined;
@@ -98,6 +116,7 @@ export class Config {
     public exe_testRunUseFile: boolean;
     public exe_listTestUseFile: boolean;
     public libPaths: string;
+    public configName: string;
 
     private _disposables: vscode.Disposable[] = [];
 
@@ -106,8 +125,13 @@ export class Config {
     private cmakeSrcDirectory : string = "";
     private cmakeBuildDirectory : string = "";
     private cmakeLaunchTargetPath : string = "";
+    private cmakeBuildType : string = "";
 
     private skipWords: string[] = [];
+
+    private cmakeApi: CMakeToolsApi | undefined;
+
+    private activeWorkspace!: (config: Config) => void | undefined ;
 
     private covert_file_path(file: string, skipWord: string): string {
         this.skipWords.push(skipWord);
@@ -180,7 +204,10 @@ export class Config {
 
     public async update_exe_executable(): Promise<void> {
         if (this.useCmakeTarget) {
-            return getExecutablePath(this.cmakeBuildDirectory, this.cmakeTarget)
+            if (this.cmakeApi === undefined) {
+                return;
+            }
+            return getExecutablePath(this.cmakeBuildType, this.cmakeBuildDirectory, this.cmakeTarget)
                         .then(targetPath => {
                             if (targetPath !== null) {
                                 this.cmakeLaunchTargetPath = targetPath || "";
@@ -233,7 +260,7 @@ export class Config {
         return this.covert_file_path(this._buildDirectory, "buildDirectory");
     }
 
-	constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, ativeWorkspace: (config: Config) => void) {
+	constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config) => void) {
         this.workspaceFolder = workspaceFolder;
         this.useCmakeTarget = vscode.workspace.getConfiguration('cdoctest').get('useCmakeTarget') as boolean;
         this._pythonExePath = vscode.workspace.getConfiguration('cdoctest').get('pythonExePath') as string;
@@ -255,10 +282,14 @@ export class Config {
         this.exe_testRunUseFile = vscode.workspace.getConfiguration('cdoctest').get('exe_testRunUseFile') as boolean;
         this.exe_listTestUseFile = vscode.workspace.getConfiguration('cdoctest').get('exe_listTestUseFile') as boolean;
         this.libPaths = vscode.workspace.getConfiguration('cdoctest').get('libPaths') as string;
+        this.configName = vscode.workspace.getConfiguration('cdoctest').get('configName') as string;
+
+        this.updateProject = this.updateProject.bind(this);
 
         if (this._pythonExePath === '') {
             throw new Error('cdoctest: pythonExePath must be set');
         }
+        this.activeWorkspace  = activeWorkspace;
 
         if (this.useCmakeTarget) {
             // assert _srcDirectory and _buildDirectory are empty
@@ -281,13 +312,14 @@ export class Config {
         }
 
         if (!this.useCmakeTarget) {
-            ativeWorkspace(this);
+            activeWorkspace(this);
         } else {
             getCMakeToolsApi(Version.v2, /*exactMatch*/ false).then(cmakeApi => {
                 if (!cmakeApi) {
                     vscode.window.showErrorMessage('CMake Tools API is unavailable. Please install CMake Tools.');
                     return;
                 }
+                this.cmakeApi = cmakeApi;
                 
                 
                 const configBuildTargetDisposable = cmakeApi.onBuildTargetChanged((target) => {
@@ -295,7 +327,7 @@ export class Config {
                     vscode.commands.executeCommand<string>('cmake.buildDirectory')
                     .then(targetDir => {
                         this.cmakeBuildDirectory = targetDir || "";
-                        getExecutablePath(this.cmakeBuildDirectory, this.cmakeTarget)
+                        getExecutablePath(this.cmakeBuildType, this.cmakeBuildDirectory, this.cmakeTarget)
                         .then(targetPath => {
                             if (targetPath !== null) {
                                 this.cmakeLaunchTargetPath = targetPath || "";
@@ -307,22 +339,26 @@ export class Config {
                 });
                 const configDoneDisposable = cmakeApi.onActiveProjectChanged((projectUri) => {
                     if (projectUri) {
-                        cmakeApi.getProject(projectUri).then(project => {
-                            this.cmakeProject = project;
-                            this.cmakeSrcDirectory =  projectUri.fsPath || "";
-                            ativeWorkspace(this);
-                        });
+                        cmakeApi.getProject(projectUri).then(this.updateProject);
                     }
                 });
-                cmakeApi.getProject(workspaceFolder.uri).then(project => {
-                    this.cmakeProject = project;
-                    this.cmakeSrcDirectory =  workspaceFolder.uri.fsPath || "";
-                    ativeWorkspace(this);
-                });
+
+                cmakeApi.getProject(workspaceFolder.uri).then(this.updateProject);
                 
                 this._disposables.push(configBuildTargetDisposable);
                 this._disposables.push(configDoneDisposable);
             });
+        }
+    }
+    private updateProject(project: Project | undefined): void {
+        if (project) {
+            this.cmakeProject = project;
+            this.cmakeSrcDirectory =  this.workspaceFolder.uri.fsPath || "";
+            project.getActiveBuildType().then(buildType => {
+                this.cmakeBuildType = buildType || "";
+                this.activeWorkspace(this);
+            });
+
         }
     }
     public dispose(): void {

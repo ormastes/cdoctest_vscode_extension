@@ -11,7 +11,7 @@ let _config: Config | undefined;
 let refreshCancellationSource: vscode.CancellationTokenSource | undefined;
 let runCancellationSource: vscode.CancellationTokenSource | undefined;
 
-export async function startTestRun(request: vscode.TestRunRequest, token: vscode.CancellationToken) {
+export async function _startTestRun(request: vscode.TestRunRequest, token: vscode.CancellationToken, isDebug: boolean) {
 	if (runCancellationSource === undefined) {
 		return;
 	}
@@ -75,7 +75,8 @@ export async function startTestRun(request: vscode.TestRunRequest, token: vscode
 				  run.failed(test, new Error(`Test failed: ${result}`), 1000);
 				}
 				resolve();
-			  }
+			  },
+			  isDebug
 			);
 		  });
 		} catch (err) {
@@ -89,6 +90,13 @@ export async function startTestRun(request: vscode.TestRunRequest, token: vscode
 		await runTest(test);
  	 }
 	run.end();
+}
+async function startTestRun(request: vscode.TestRunRequest, token: vscode.CancellationToken) {
+	return _startTestRun(request, token, false);
+}
+
+async function startDebugRun(request: vscode.TestRunRequest, token: vscode.CancellationToken) {
+	return _startTestRun(request, token, true);
 }
 
 
@@ -104,7 +112,24 @@ export function setupController(
 	runCancellationSource = new vscode.CancellationTokenSource();
 
 	// Create run profiles
-	ctrl.createRunProfile('Run Tests', vscode.TestRunProfileKind.Run, startTestRun, true, undefined, true);
+	ctrl.createRunProfile(
+		'Run Tests', 
+		vscode.TestRunProfileKind.Run, 
+		startTestRun, 
+		true, 
+		undefined, 
+		true
+	);
+
+	// Create debug profiles
+	ctrl.createRunProfile(
+		'Debug Tests', 
+		vscode.TestRunProfileKind.Run, 
+		startDebugRun, 
+		true, 
+		undefined, 
+		true
+	);
 
 	const coverageProfile = ctrl.createRunProfile(
 		'Run with Coverage',
