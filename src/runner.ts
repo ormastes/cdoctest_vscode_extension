@@ -40,7 +40,7 @@ export async function launchDebugSessionWithCloseHandler(
     let debugConfig: vscode.DebugConfiguration = (baseConfig)? { ...baseConfig } : { type: '', name: '', request: '' };
 
     if (debugConfig.type === undefined || debugConfig.type === '') {
-        debugConfig.type = 'cppdbg';
+        debugConfig.type = 'lldb-dap';
     }
     if (debugConfig.name === undefined || debugConfig.name === '') {
         debugConfig.name = 'Debug Program';

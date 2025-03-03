@@ -44,7 +44,8 @@
     "typescript": "^5.7.3"
   },
   "extensionDependencies": [
-    "ms-vscode.cmake-tools"
+    "ms-vscode.cmake-tools",
+    "llvm-vs-code-extensions.lldb-dap"
   ],
   "contributes": {
     "configuration": {
@@ -74,7 +75,7 @@
         "cdoctest.exe_testRunArgPattern": {
           "description": "Test run argument pattern for executable",
           "type": "string",
-          "default": "TC/${test_suite_name}/${test_case_name} output.vsc"
+          "default": "TC/${test_suite_name}::${test_case_name} output.vsc"
         },
         "cdoctest.exe_listTestArgPattern": {
           "description": "List test argument pattern for executable",

@@ -1,0 +1,9 @@
+[
+  {
+    "name": "Kit from C:/Python313/Lib/site-packages/clang_repl_kernel/clang/WinMG64/bin",
+    "compilers": {
+      "C": "C:\\Python313\\Lib\\site-packages\\clang_repl_kernel\\clang\\WinMG64\\bin\\clang.exe",
+      "CXX": "C:\\Python313\\Lib\\site-packages\\clang_repl_kernel\\clang\\WinMG64\\bin\\clang++.exe"
+    }
+  }
+]

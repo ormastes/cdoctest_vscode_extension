@@ -3,5 +3,20 @@
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
-    "configurations": []
+    "configurations": [
+        {
+			"name": "Debug",
+			"type": "lldb-dap",
+			"request": "launch",
+			"program": "c:/dev/cdoctest_vscode_extension/test/integrated_unit_testpp_cmake/build/hello_test.exe",
+			"cwd": "c:/dev/cdoctest_vscode_extension/test/integrated_unit_testpp_cmake/build",
+			"args": [
+				"TC/MathTests::Addition",
+				"output.vsc"
+			],
+			"env": {
+				"PATH": "${env:PATH};C:/Python313/Lib/site-packages/clang_repl_kernel/clang/WinMG64/bin"
+			}
+		}
+    ]
 }

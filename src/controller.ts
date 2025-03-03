@@ -124,7 +124,7 @@ export function setupController(
 	// Create debug profiles
 	ctrl.createRunProfile(
 		'Debug Tests', 
-		vscode.TestRunProfileKind.Run, 
+		vscode.TestRunProfileKind.Debug, 
 		startDebugRun, 
 		true, 
 		undefined, 
@@ -147,7 +147,7 @@ export function setupController(
 	};
 
 	// Set refresh handler to initialize tests from workspace files.
-	ctrl.refreshHandler = async () => {
+ ctrl.refreshHandler = async () => {
 		if (!vscode.workspace.workspaceFolders) {
 			return;
 		}

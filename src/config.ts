@@ -97,6 +97,7 @@ export class Config {
     private workspaceFolder: vscode.WorkspaceFolder;
     public useCmakeTarget: boolean;
     public _pythonExePath: string;
+    public cdoctest_min_version: string = '1.1.0';
 
 	public _testRunArgPattern: string;
 	public _listTestArgPattern: string;
@@ -176,6 +177,9 @@ export class Config {
     public get_testrun_executable_args(additionalEnv: { [key: string]: string }): string[] | undefined {
         if (this.executable === "") { return undefined;}
         return this._get_testrun_executable_args(this.executable +' ' + this._testRunArgPattern, additionalEnv);
+    }
+    public get pythonExePath(): string {
+        return this.covert_file_path(this._pythonExePath, "pythonExePath");
     }
     public get exe_testrun_list_args(): string[] | undefined {
         if (this.exe_executable === "") { return undefined;}

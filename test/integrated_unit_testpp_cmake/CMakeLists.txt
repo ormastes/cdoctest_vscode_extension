@@ -10,8 +10,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(unittest-cpp)
 
-set(CMAKE_CXX_FLAGS_RELEASE "/MD")
-set(CMAKE_CXX_FLAGS_DEBUG "/MDd")
+#set(CMAKE_CXX_FLAGS_RELEASE "/MD")
+#set(CMAKE_CXX_FLAGS_DEBUG "/MDd")
 # Create test executable
 add_executable(hello_test test_main.cpp)
 target_link_libraries(hello_test UnitTest++)
