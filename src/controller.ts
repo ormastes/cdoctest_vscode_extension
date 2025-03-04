@@ -4,6 +4,7 @@ import { MarkdownFileCoverage } from './coverage';
 import { Config } from './config';
 import { runner } from './runner';
 import { resolveTcListHandler } from './tclist_parser/file_change_listener';
+import { fileExists, fileExistsText } from './util';
 
 
 export const ctrl = vscode.tests.createTestController('mathTestController', 'Markdown Math');
@@ -154,11 +155,15 @@ export function setupController(
 		if (refreshCancellationSource === undefined) {
 			return;
 		}
-		config.update_exe_executable().then(() => {
-			runner(config.testrun_list_args, config.buildDirectory, config.listTestUseFile, config.resultFile, config, refreshCancellationSource, (result: string) => {
-				// Parse the result string and update the test tree.
-				const lines = result.split('\n');
-			});
+		config.update_exe_executable().then(async () => {
+			if (await fileExistsText(config.target)) {
+				runner(config.testrun_list_args, config.buildDirectory, config.listTestUseFile, config.resultFile, config, refreshCancellationSource, (result: string) => {
+					// Parse the result string and update the test tree.
+					const lines = result.split('\n');
+				});
+			} else {
+				console.warn('Test Target File does not exist:', config.target);
+			}
 		});
 
 		

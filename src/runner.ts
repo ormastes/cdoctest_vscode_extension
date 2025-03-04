@@ -4,6 +4,32 @@ import { Config } from './config';
 import * as readline from 'readline';
 import { spawn, ChildProcess, SpawnOptions } from 'child_process';
 import * as os from 'os';
+import { fileExists } from './util';
+
+let stdoutLines: { [key: string]: string[] } = {};
+
+export function initRunner(context: vscode.ExtensionContext) {
+    const trackerFactory = {
+        createDebugAdapterTracker(session: vscode.DebugSession): vscode.DebugAdapterTracker {
+            return {
+                onDidSendMessage: message => {
+                    // Check if the message is an output event
+                    if (message.type === 'event' && message.event === 'output') {
+                        const output = message.body;
+                        // Check if the output is from stdout
+                        if (output.category === 'stdout' && stdoutLines[session.id]) {
+                            const outputStr = output.output.trim();
+                            stdoutLines[session.id].push(outputStr);
+                        }
+                    }
+                }
+            };
+        }
+    };
+
+    // Register the tracker factory for a specific debug type, e.g., 'node'
+    context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory('lldb-dap', trackerFactory));
+}
 
 /**
  * Retrieves a launch configuration from workspace settings by its name.
@@ -33,8 +59,15 @@ export async function launchDebugSessionWithCloseHandler(
     resultHandler: ((result: string) => void),
     resolve: ()=>void,
     reject: (reason?: any) => void,
-    envVars: { [key: string]: string }
+    envVars: { [key: string]: string },
+    isUseFile: boolean,
+    isDebug: boolean
 ): Promise<void> {
+    // check program file exists
+    if (!program || await fileExists(vscode.Uri.file(program)) === false) {
+        reject('Program file does not exist.');
+        return;
+    }
     const baseConfig = await getLaunchConfigurationByName(configName);
     // Make a shallow copy so we don't alter the stored settings.
     let debugConfig: vscode.DebugConfiguration = (baseConfig)? { ...baseConfig } : { type: '', name: '', request: '' };
@@ -56,25 +89,53 @@ export async function launchDebugSessionWithCloseHandler(
     debugConfig.cwd = workingDirectory;
     debugConfig.env = envVars;
 
+    async function handlClose(session: vscode.DebugSession): Promise<void> {
+        // Filter based on the session name (or you could use session.id if preferred).
+        if (session.name === debugConfig.name) {
+            console.log(`Debug session "${session.name}" has terminated with exit code (if available)`);
+            // Perform any cleanup or further actions here.
+            if (isUseFile) {
+                if (! await fileExists(vscode.Uri.file(resultFile))) {
+                    return;
+                }
+                await getResultFromFile(resultFile, resultHandler, reject);
+            } else {
+                if (!stdoutLines[session.id]) {
+                    return;
+                }
+                let output = stdoutLines[session.id].join('\n');
+                resultHandler(output);
+            }
+            // Clear the stored output for this session.
+            if (stdoutLines[session.id]) {
+                delete stdoutLines[session.id];
+            }
+        }
+    }
+
+    if (!isDebug) {
+        //debugConfig.noDebug = true;
+    }
+    // capture session start event
+    console.log('isUseFile:', isUseFile);
+    const result = vscode.debug.onDidStartDebugSession(async (session) => {
+        if (!isUseFile) {
+            stdoutLines[session.id] = [];
+        }
+        // Attach a listener for when any debug session terminates.
+        const terminationListener = vscode.debug.onDidTerminateDebugSession(async (session) => {
+            await handlClose(session);
+            terminationListener.dispose();
+        });
+        // remove the listener
+        result.dispose();
+    });
 
     const started = await vscode.debug.startDebugging(undefined, debugConfig);
     if (!started) {
         vscode.window.showErrorMessage('Failed to start debugging session.');
     }
-
-    // Attach a listener for when any debug session terminates.
-    const terminationListener = vscode.debug.onDidTerminateDebugSession(async (session) => {
-        // Filter based on the session name (or you could use session.id if preferred).
-        if (session.name === debugConfig.name) {
-            console.log(`Debug session "${session.name}" has terminated with exit code (if available)`);
-            // Perform any cleanup or further actions here.
-
-            await getResultFromFile(resultFile, resultHandler, reject);
-
-            // Dispose the listener since it's no longer needed.
-            terminationListener.dispose();
-        }
-    });
+    result;
 }
 
 
@@ -98,6 +159,7 @@ export function runProgramWithLibPaths(
     resultHandler: ((result: string) => void),
     resolve: ()=>void,
     reject: (reason?: any) => void,
+    isUseFile: boolean,
     isDebug: boolean
 ): ChildProcess | Promise<void> {
     // Clone the current process environment
@@ -132,33 +194,9 @@ export function runProgramWithLibPaths(
         env.DYLD_LIBRARY_PATH = libPaths + (currentDYLD ? ':' + currentDYLD : '');
     }
 
-    if (isDebug) {
-        return launchDebugSessionWithCloseHandler(
-            configName, program, args, buildDirectory, resultFile, resultHandler, resolve, reject, env);
-    } else {
-        // Default spawn options: use our modified environment and inherit stdio.
-        const spawnOptions: SpawnOptions = {
-            env,
-            cwd: buildDirectory,
-            shell: true
-        };
-        // Spawn the process and return the ChildProcess to the caller.
-        return spawn(program, args, spawnOptions);
-    }
-}
-
-
-export async function fileExists(uri: vscode.Uri): Promise<boolean> {
-    try {
-        await vscode.workspace.fs.stat(uri);
-        return true;
-    } catch (err: any) {
-        // File doesn't exist if the error indicates a missing file.
-        if (err.code === 'FileNotFound' || err.code === 'ENOENT') {
-            return false;
-        }
-        throw err;
-    }
+    return launchDebugSessionWithCloseHandler(
+        configName, program, args, buildDirectory, resultFile, 
+        resultHandler, resolve, reject, env, isUseFile, isDebug);
 }
 
 
@@ -204,91 +242,19 @@ export async function runner(run_args: string[] | undefined, buildDirectory: str
 
         const args = run_args.slice(1);
 
-        const cdocRefreshProcess = runProgramWithLibPaths(
+        runProgramWithLibPaths(
             config.configName,
             executable,
             args,
             config.libPaths,
             buildDirectory,
-            config.resultFile,
+            resultFile,
             resultHandler,
             resolve,
             reject,
+            isUseFile,
             isDebug
         );
-
-        if (!cdocRefreshProcess) {
-            return;
-        }
-        if (cdocRefreshProcess instanceof Promise) {
-            await cdocRefreshProcess;
-            return;
-        }
-        try {
-            const childRl = readline.createInterface({
-                input: cdocRefreshProcess.stdout!,
-                output: process.stdout,
-                terminal: false
-            });
-            const result: string[] = [];
-            const childLineHandler = (line: string) => {
-                if (isUseFile) {
-                    console.log(`stdout: ${line}`);
-                } else {
-                    result.push(line);
-                }
-            };
-
-            childRl.on('line', (line) => {
-                try {
-                    childLineHandler(line);
-                } catch (error) {
-                    console.error(`Child process error: ${error}`);
-                    if (cdocRefreshProcess !== undefined) {
-                        cdocRefreshProcess.kill();
-                    }
-                    reject(error);
-                }
-            });
-            cdocRefreshProcess.on('error', (error) => {
-                console.error(`Child process error: ${error}`);
-                if (cdocRefreshProcess !== undefined) {
-                    cdocRefreshProcess.kill();
-                }
-                reject(error);
-            });
-            cdocRefreshProcess.on('close', async (code) => {
-                vscode.window.showInformationMessage(`Test executable exited with code ${code}`);
-                //cdocRefreshProcess = undefined;
-                //refreshCancellationSource?.dispose();
-                //refreshCancellationSource = undefined;
-                if (isUseFile) {
-                    await getResultFromFile(resultFile, resultHandler, reject);
-                } else {
-                    const testList = result.join('\n');
-                    resultHandler(testList);
-                }
-                // Manually monitor cancellation token.
-                token.onCancellationRequested(() => {
-                    console.log('cancellation requested');
-                    if (cdocRefreshProcess) {
-                        cdocRefreshProcess.kill();
-                    }
-                });
-                resolve();
-            });
-        } catch (error) {
-            if (cdocRefreshProcess.exitCode === 0) {
-                console.log(`child process exited with code ${cdocRefreshProcess.exitCode}`);
-                resolve();
-            } else {
-                console.error(`Child process error: ${error}`);
-                if (cdocRefreshProcess) {
-                    cdocRefreshProcess.kill();
-                }
-                reject(error);
-            }
-        }
     });
 }
 

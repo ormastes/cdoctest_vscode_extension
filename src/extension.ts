@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { Config } from './config';
 import { MarkdownFileCoverage } from './coverage';
 import { setupController } from './controller';
+import { initRunner } from './runner';
 import { checkCDocTestVersion, getToolchainDir,  addNewToolchain} from './pyAdapter';
 
 
@@ -11,6 +12,7 @@ let lastWorkspace: vscode.WorkspaceFolder | undefined;
 
 export async function activate(context: vscode.ExtensionContext) {
 	const fileChangedEmitter = new vscode.EventEmitter<vscode.Uri>();
+	initRunner(context);
 
 	async function _ativeWorkspace(config: Config) {
 
