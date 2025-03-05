@@ -1,26 +1,28 @@
 import * as vscode from 'vscode';
 import { getOrCreateFile } from './fileHelper';
-import { ctrl, setupController } from '../controller';
 import { testData } from './testTree';
+import { get } from 'http';
 
-export async function resolveTcListHandler(item: vscode.TestItem | undefined): Promise<void> {
-	if (item) {
-		const data = testData.get(item);
-		// Dynamically import TestFile to avoid circular dependency issues.
-		const { TestFile } = await import('./testTree.js');
-		if (data instanceof TestFile) {
-			await data.updateFromDisk(ctrl, item);
+export function getResolveTcListHandler(curCtrl: vscode.TestController) {
+	return async (item: vscode.TestItem | undefined): Promise<void> => {
+		if (item) {
+			const data = testData.get(item);
+			// Dynamically import TestFile to avoid circular dependency issues.
+			const { TestFile } = await import('./testTree.js');
+			if (data instanceof TestFile) {
+				await data.updateFromDisk(curCtrl, item);
+			}
 		}
-	}
+	};
 }
 
-function updateFileNodesOnDocumentChange(context: vscode.ExtensionContext) {
+function updateFileNodesOnDocumentChange(curCtrl: vscode.TestController, context: vscode.ExtensionContext) {
 	function updateNodeForDocument(e: vscode.TextDocument) {
 		if (e.uri.scheme !== 'file' || (!e.uri.path.endsWith('.c') && !e.uri.path.endsWith('.cpp') && !e.uri.path.endsWith('.h'))) {
 			return;
 		}
-		const { file, data } = getOrCreateFile(ctrl, e.uri);
-		data.updateFromContents(ctrl, e.getText(), file);
+		const { file, data } = getOrCreateFile(curCtrl, e.uri);
+		data.updateFromContents(curCtrl, e.getText(), file);
 	}
 
 	for (const document of vscode.workspace.textDocuments) {
@@ -33,28 +35,29 @@ function updateFileNodesOnDocumentChange(context: vscode.ExtensionContext) {
 	);
 }
 
-
-export function listenFileChangeForTclist(fileChangedEmitter: vscode.EventEmitter<vscode.Uri>, watchingTests: Map<vscode.TestItem | "ALL", vscode.TestRunProfile | undefined>, context: vscode.ExtensionContext) {
-	fileChangedEmitter.event(uri => {
-		if (watchingTests.has('ALL')) {
-			//startTestRun(new vscode.TestRunRequest(undefined, undefined, watchingTests.get('ALL'), true), ctrl);
-			return;
-		}
-
-		const include: vscode.TestItem[] = [];
-		let profile: vscode.TestRunProfile | undefined;
-		for (const [item, thisProfile] of watchingTests) {
-			if (item !== 'ALL' && item.uri?.toString() === uri.toString()) {
-				include.push(item);
-				profile = thisProfile;
+export function getListenFileChangeForTclist(curCtrl: vscode.TestController) {
+	return (fileChangedEmitter: vscode.EventEmitter<vscode.Uri>, watchingTests: Map<vscode.TestItem | "ALL", vscode.TestRunProfile | undefined>, context: vscode.ExtensionContext) => {
+		fileChangedEmitter.event((uri: vscode.Uri) => {
+			if (watchingTests.has('ALL')) {
+				//startTestRun(new vscode.TestRunRequest(undefined, undefined, watchingTests.get('ALL'), true), ctrl);
+				return;
 			}
-		}
 
-		if (include.length) {
-			//startTestRun(new vscode.TestRunRequest(include, undefined, profile, true), ctrl);
-		}
-	});
+			const include: vscode.TestItem[] = [];
+			let profile: vscode.TestRunProfile | undefined;
+			for (const [item, thisProfile] of watchingTests) {
+				if (item !== 'ALL' && item.uri?.toString() === uri.toString()) {
+					include.push(item);
+					profile = thisProfile;
+				}
+			}
 
-	// Update tests when a document is opened or changed.
-	updateFileNodesOnDocumentChange(context);
+			if (include.length) {
+				//startTestRun(new vscode.TestRunRequest(include, undefined, profile, true), ctrl);
+			}
+		});
+
+		// Update tests when a document is opened or changed.
+		updateFileNodesOnDocumentChange(curCtrl, context);
+	};
 }

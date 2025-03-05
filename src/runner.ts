@@ -117,7 +117,6 @@ export async function launchDebugSessionWithCloseHandler(
         //debugConfig.noDebug = true;
     }
     // capture session start event
-    console.log('isUseFile:', isUseFile);
     const result = vscode.debug.onDidStartDebugSession(async (session) => {
         if (!isUseFile) {
             stdoutLines[session.id] = [];

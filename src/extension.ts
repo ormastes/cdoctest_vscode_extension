@@ -2,12 +2,13 @@
 import * as vscode from 'vscode';
 import { Config } from './config';
 import { MarkdownFileCoverage } from './coverage';
-import { setupController } from './controller';
+import { setupController } from './controller/controller';
 import { initRunner } from './runner';
 import { checkCDocTestVersion, getToolchainDir,  addNewToolchain} from './pyAdapter';
 
 
-let currentConfig: Config | undefined;
+let exeConfig: Config | undefined;
+let cdocConfig: Config | undefined;
 let lastWorkspace: vscode.WorkspaceFolder | undefined;
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -34,16 +35,20 @@ export async function activate(context: vscode.ExtensionContext) {
 		lastWorkspace = newWorkspace;
 		
 		// Dispose previous instance if needed
-		if (currentConfig) {
-			currentConfig.dispose();
+		if (exeConfig) {
+			exeConfig.dispose();
 		}
-		currentConfig = await new Config(context, newWorkspace, _ativeWorkspace);
-		checkCDocTestVersion(currentConfig).then((installed: any) => {
+		if (cdocConfig) {
+			cdocConfig.dispose();
+		}
+		exeConfig = await new Config(context, newWorkspace, _ativeWorkspace);
+		cdocConfig = await new Config(context, newWorkspace, _ativeWorkspace);
+		checkCDocTestVersion(cdocConfig).then((installed: any) => {
 			if (!installed) {
-				console.error('Error checking cdoctest version not met minimum required version:', currentConfig?.cdoctest_min_version);
+				console.error('Error checking cdoctest version not met minimum required version:', cdocConfig?.cdoctest_min_version);
 				process.exit(1);
 			} 
-			getToolchainDir(currentConfig!).then((toolChainDir: any) => {
+			getToolchainDir(cdocConfig!).then((toolChainDir: any) => {
 				if (!toolChainDir) {
 					console.error('Error getting toolchain of clang_repl_kernel directory. Toolchain on clang_repl_kernel is not set or installed.');
 					process.exit(1);
