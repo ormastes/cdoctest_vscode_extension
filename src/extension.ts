@@ -4,7 +4,7 @@ import { Config } from './config';
 import { MarkdownFileCoverage } from './coverage';
 import { setupController } from './controller/controller';
 import { initRunner } from './runner';
-import { checkCDocTestVersion, getToolchainDir,  addNewToolchain} from './pyAdapter';
+import { checkCDocTestVersion, getToolchainDir,  addNewToolchain, checkToolchainInstalled} from './pyAdapter';
 
 
 let exeConfig: Config | undefined;
@@ -43,12 +43,19 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 		exeConfig = await new Config(context, newWorkspace, _ativeWorkspace);
 		cdocConfig = await new Config(context, newWorkspace, _ativeWorkspace);
-		checkCDocTestVersion(cdocConfig).then((installed: any) => {
+		checkCDocTestVersion(exeConfig).then(async(installed: any) => {
 			if (!installed) {
-				console.error('Error checking cdoctest version not met minimum required version:', cdocConfig?.cdoctest_min_version);
+				console.error('Error checking cdoctest version not met minimum required version:', exeConfig?.cdoctest_min_version);
+				console.error('Please install the cdoctest on python by "python -m pip install --upgrade cdoctest".');
 				process.exit(1);
 			} 
-			getToolchainDir(cdocConfig!).then((toolChainDir: any) => {
+			if (!await checkToolchainInstalled(exeConfig!)) {
+				console.error('Error checking cdoctest toolchain. Toolchain on cdoctest is not set or installed.');
+				console.error('Please install the toolchain on cdoctest by "python -m clang_repl_kernel --install-default-toolchain".');
+				process.exit(1);
+			}
+
+			getToolchainDir(exeConfig!).then((toolChainDir: any) => {
 				if (!toolChainDir) {
 					console.error('Error getting toolchain of clang_repl_kernel directory. Toolchain on clang_repl_kernel is not set or installed.');
 					process.exit(1);

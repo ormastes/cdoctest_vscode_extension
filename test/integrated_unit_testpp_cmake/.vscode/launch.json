@@ -15,7 +15,7 @@
 				"output.vsc"
 			],
 			"env": {
-				"PATH": "${env:PATH};C:/Python313/Lib/site-packages/clang_repl_kernel/clang/WinMG64/bin"
+				"PATH": "C:/Python313/Lib/site-packages/clang_repl_kernel/clang/WinMG32/bin;${env:PATH}"
 			}
 		}
     ]

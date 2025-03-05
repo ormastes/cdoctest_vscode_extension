@@ -38,14 +38,14 @@ interface CMakeKit {
    */
   async function addCMakeKitToWorkspace(binDir: string, kitsFilePath: string): Promise<void> {
     // Define expected compiler paths using the provided binary directory.
-    const gccPath = path.join(binDir, process.platform === 'win32' ? 'clang.exe' : 'clang');
-    const gppPath = path.join(binDir, process.platform === 'win32' ? 'clang++.exe' : 'clang++');
+    const clangPath = path.join(binDir, process.platform === 'win32' ? 'clang.exe' : 'clang');
+    const clangPPPath = path.join(binDir, process.platform === 'win32' ? 'clang++.exe' : 'clang++');
   
     const newKit: CMakeKit = {
       name: `Kit from ${binDir}`,
       compilers: {
-        C: gccPath,
-        CXX: gppPath,
+        C: clangPath,
+        CXX: clangPPPath,
       }
     };
   
@@ -64,7 +64,7 @@ interface CMakeKit {
   
     // Avoid duplicate: check if kit with same compiler paths exists.
     const duplicate = kits.find(
-      kit => kit.compilers?.C === gccPath && kit.compilers?.CXX === gppPath
+      kit => kit.compilers?.C === clangPath && kit.compilers?.CXX === clangPPPath
     );
     if (duplicate) {
       vscode.window.showInformationMessage(`A kit for "${binDir}" is already added.`);
@@ -99,19 +99,47 @@ export async function addNewToolchain(binDir: string): Promise<void> {
       await addCMakeKitToWorkspace(binDir, kitsFilePath);
     }
   }
+
+export async function checkToolchainInstalled(config: Config): Promise<boolean> {
+    // The command prints the directory where clang_repl_kernel.__file__ is located.
+    const command = `${config.pythonExePath} -c "from clang_repl_kernel import ClangReplConfig; import platform; from clang_repl_kernel import is_installed_clang_exist; print( is_installed_clang_exist());"`;
+
+    try {
+        const { stdout, stderr } = await execAsync(command);
+        // get directory path
+        const is_installed_clang_exist= stdout.trim().toLowerCase().includes('true');
+        if (is_installed_clang_exist) {
+          return Promise.resolve(is_installed_clang_exist);
+        }
+        if (stderr) {
+            console.error('Error output:', stderr);
+            return Promise.reject(stderr);
+        }
+        return Promise.resolve(is_installed_clang_exist);
+    } catch (error) {
+        console.error('Failed to get clang_repl_kernel directory:', error);
+        return Promise.reject(error);
+    }
+}
 export async function getToolchainDir(config: Config): Promise<string> {
     // The command prints the directory where clang_repl_kernel.__file__ is located.
     const command = `${config.pythonExePath} -c "from clang_repl_kernel import ClangReplConfig; import platform; from clang_repl_kernel import install_bundles; install_bundles(platform.system(), None); print( ClangReplConfig.get_bin_path());"`;
 
     try {
         const { stdout, stderr } = await execAsync(command);
+
+        // get directory path
+        const toolchainExecutable = stdout.trim().replaceAll('\\', '/');
+        const toolchainDir = toolchainExecutable.substring(0, toolchainExecutable.lastIndexOf('/'));
+        if (toolchainDir.trim().length !== 0) {
+            return toolchainDir;
+        }
+        
         if (stderr) {
             console.error('Error output:', stderr);
             return Promise.reject(stderr);
         }
-        // get directory path
-        const toolchainExecutable = stdout.trim().replaceAll('\\', '/');
-        const toolchainDir = toolchainExecutable.substring(0, toolchainExecutable.lastIndexOf('/'));
+        
         return toolchainDir;
     } catch (error) {
         console.error('Failed to get clang_repl_kernel directory:', error);

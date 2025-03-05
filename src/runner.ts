@@ -81,9 +81,6 @@ export async function launchDebugSessionWithCloseHandler(
     if (debugConfig.request === undefined || debugConfig.request === '') {
         debugConfig.request = 'launch';
     }
-    if (debugConfig.stopAtEntry === undefined || debugConfig.stopAtEntry === '') {
-        debugConfig.stopAtEntry = false;
-    }
     debugConfig.program = program;
     debugConfig.args = args;
     debugConfig.cwd = workingDirectory;
@@ -114,7 +111,7 @@ export async function launchDebugSessionWithCloseHandler(
     }
 
     if (!isDebug) {
-        //debugConfig.noDebug = true;
+        debugConfig.noDebug = true;
     }
     // capture session start event
     const result = vscode.debug.onDidStartDebugSession(async (session) => {
@@ -129,10 +126,13 @@ export async function launchDebugSessionWithCloseHandler(
         // remove the listener
         result.dispose();
     });
-
-    const started = await vscode.debug.startDebugging(undefined, debugConfig);
-    if (!started) {
-        vscode.window.showErrorMessage('Failed to start debugging session.');
+    try {
+        const started = await vscode.debug.startDebugging(undefined, debugConfig);
+        if (!started) {
+            vscode.window.showErrorMessage('Failed to start debugging session.');
+        }
+    } catch (error) {
+        reject(error);
     }
     result;
 }
