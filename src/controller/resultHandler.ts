@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { Config } from '../config';
 import { MarkdownFileCoverage } from '../coverage';
+import { getConfigByController } from './controller';
+
 
 export function getTestRunHandler( test: vscode.TestItem, config: Config, run: vscode.TestRun,  resolve: () => void): ((result: string) => void) {
     return (result: string): void => {
@@ -48,25 +51,28 @@ export function getTestListHandler(ctrl: vscode.TestController): (result: string
         fixture = fixture.trim();
         test = test.trim();
         var sourceFile = _sourceFile.trim();
+        if (path.isAbsolute(sourceFile) === false) {
+            const config = getConfigByController(ctrl);
+            if (config && config.buildDirectory) {
+                sourceFile = path.join(config.buildDirectory, sourceFile);
+            } else {
+                console.error('Config is undefined');
+            }
+        }
+        // if sourceFile is not absolute path, make it absolute
         var sourceLine = _sourceLine.trim();
     
     
         //let fixtureTests = <TestSuiteInfo>testSuite.children.find(
         //    value => value.id == fixture
         //);
-        let root_item = ctrl.items.get('root-suite');
-        if (!root_item) {
-            root_item = ctrl.createTestItem('root-suite', 'CPP Executable Test');
-            root_item.canResolveChildren = true;
-            ctrl.items.add(root_item);
-        }
     
-        let fixture_item = root_item?.children.get(fixture);
+        let fixture_item = ctrl.items.get(fixture);
         if (!fixture_item) {
             let uri = vscode.Uri.file(sourceFile);
             fixture_item = ctrl.createTestItem(fixture, fixture, uri);
             fixture_item.canResolveChildren = true;
-            root_item?.children.add(fixture_item);
+            ctrl.items.add(fixture_item);
         }
     
         let test_item = fixture_item?.children.get(fixtureTest);
@@ -81,23 +87,11 @@ export function getTestListHandler(ctrl: vscode.TestController): (result: string
     };
 
     return (result: string): void => {
-    let root_item = ctrl.items.get('root-suite');
-    if (!root_item) {
-        root_item = ctrl.createTestItem('root-suite', 'CPP Executable Test');
-        root_item.canResolveChildren = true;
-        ctrl.items.add(root_item);
-    }
-    const childIds: string[] = [];
-    root_item.children.forEach(item => {
-        childIds.push(item.id);
-    });
-
-    // Then, delete each child by its ID
-    childIds.forEach(id => {
-        root_item.children.delete(id);
-    });
-    const lines = result.split('\n');
-    lines.forEach(testListLineHandler);
-};
+        ctrl.items.replace([]);
+        
+        const lines = result.split('\n');
+        lines.forEach(testListLineHandler);
+    };
 }
+
 

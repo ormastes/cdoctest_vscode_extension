@@ -154,6 +154,11 @@ export async function getExecutablePath(buildType: string, buildDir: string, tar
     return _getDllExecutablePath('.exe', reply, buildType, normalizedBuildDir, targetName);
 }
 
+// config enum for Config | ExeConfig 0: Config, 1: ExeConfig
+export enum ConfigType {
+    Config = 0,
+    ExeConfig = 1
+}
 
 // # test run variable 
 // ${test_suite_name}: Provided from vscode
@@ -171,6 +176,7 @@ export async function getExecutablePath(buildType: string, buildDir: string, tar
 //
 export class Config {
     private workspaceFolder: vscode.WorkspaceFolder;
+    public type: ConfigType;
     public controllerId: string;
     public useCmakeTarget: boolean;
     public _pythonExePath: string;
@@ -201,7 +207,7 @@ export class Config {
     public cmakeProject: Project | undefined;
     private cmakeTarget: string = "";
     private cmakeSrcDirectory: string = "";
-    private cmakeBuildDirectory: string = "";
+    protected cmakeBuildDirectory: string = "";
     private cmakeLaunchTargetPath: string = "";
     private cmakeBuildType: string = "";
 
@@ -209,9 +215,9 @@ export class Config {
 
     private cmakeApi: CMakeToolsApi | undefined;
 
-    private activeWorkspace!: (config: Config) => void | undefined;
+    private activeWorkspace!: (config: Config | ExeConfig) => void | undefined;
 
-    private covert_file_path(file: string, skipWord: string): string {
+    protected covert_file_path(file: string, skipWord: string): string {
         this.skipWords.push(skipWord);
         file = this.convert(file, {});
         this.skipWords.pop();
@@ -222,7 +228,7 @@ export class Config {
     }
 
     // key should have ${test_full_name} and ${test_suite_name} and ${test_case_name}
-    private convert(text: string, additionalEnv: { [key: string]: string }): string {
+    protected convert(text: string, additionalEnv: { [key: string]: string }): string {
         let dic_applied_text = text;
         for (const key in additionalEnv) {
             dic_applied_text = dic_applied_text.replace('${' + key + '}', additionalEnv[key]);
@@ -235,6 +241,7 @@ export class Config {
             if (this.useCmakeTarget) {
                 result = result.replace('${cmakeTarget}', this.cmakeTarget);
             }
+            if (!this.skipWords.includes("pythonExePath")) { result = result.replace('${pythonExePath}', this._pythonExePath); }
             if (result.indexOf('${') === -1) {
                 break;
             }
@@ -264,7 +271,7 @@ export class Config {
     }
     public get testrun_list_args(): string[] | undefined {
         if (this.executable === "") { return undefined; }
-        return this.convert(this.executable + ' ' + this._listTestArgPattern, {}).split(' ');
+        return this.convert(this._listTestArgPattern, {}).split(' ');
     }
     public get resultFile(): string {
         return this.covert_file_path(this._resultFile, "resultFile");
@@ -318,7 +325,7 @@ export class Config {
             } else {
                 dynlib = withoutExt + '.so';
             }
-            return this.covert_file_path(dynlib, "executable");
+            return this.covert_file_path(this.cmakeLaunchTargetPath, "executable");
         }
         return this.covert_file_path(this._executable, "executable");
     }
@@ -348,10 +355,51 @@ export class Config {
     public get listTestUseFile(): boolean {
         return this._listTestUseFile;
     }
+    public activateWorkspaceBaseOnCmakeSetting():void {
+        if (!this.useCmakeTarget) {
+            this.activeWorkspace(this);
+        } else {
+            getCMakeToolsApi(Version.v2, /*exactMatch*/ false).then(cmakeApi => {
+                if (!cmakeApi) {
+                    vscode.window.showErrorMessage('CMake Tools API is unavailable. Please install CMake Tools.');
+                    return;
+                }
+                this.cmakeApi = cmakeApi;
 
-    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config) => void) {
+
+                const configBuildTargetDisposable = cmakeApi.onBuildTargetChanged((target) => {
+                    this.cmakeTarget = target;
+                    vscode.commands.executeCommand<string>('cmake.buildDirectory')
+                        .then(targetDir => {
+                            this.cmakeBuildDirectory = targetDir || "";
+                            getExecutablePath(this.cmakeBuildType, this.cmakeBuildDirectory, this.cmakeTarget)
+                                .then(targetPath => {
+                                    if (targetPath !== null) {
+                                        this.cmakeLaunchTargetPath = targetPath || "";
+                                    }
+                                });
+
+                        });
+
+                });
+                const configDoneDisposable = cmakeApi.onActiveProjectChanged((projectUri) => {
+                    if (projectUri) {
+                        cmakeApi.getProject(projectUri).then(this.updateProject);
+                    }
+                });
+
+                cmakeApi.getProject(this.workspaceFolder.uri).then(this.updateProject);
+
+                this._disposables.push(configBuildTargetDisposable);
+                this._disposables.push(configDoneDisposable);
+            });
+        }
+    }
+
+    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config|ExeConfig) => void, isActivateWorkspace:boolean = true) {
+        this.type = ConfigType.Config;
         this.workspaceFolder = workspaceFolder;
-        this.controllerId = "exe_test";
+        this.controllerId = "cdoctest";
         this.useCmakeTarget = vscode.workspace.getConfiguration('cdoctest').get('useCmakeTarget') as boolean;
         this._pythonExePath = vscode.workspace.getConfiguration('cdoctest').get('pythonExePath') as string;
         this._testRunArgPattern = vscode.workspace.getConfiguration('cdoctest').get('testRunArgPattern') as string;
@@ -400,45 +448,10 @@ export class Config {
                 throw new Error('cdoctest: executable or exe_executable must be set when useCmakeTarget is false');
             }
         }
-
-        if (!this.useCmakeTarget) {
-            activeWorkspace(this);
-        } else {
-            getCMakeToolsApi(Version.v2, /*exactMatch*/ false).then(cmakeApi => {
-                if (!cmakeApi) {
-                    vscode.window.showErrorMessage('CMake Tools API is unavailable. Please install CMake Tools.');
-                    return;
-                }
-                this.cmakeApi = cmakeApi;
-
-
-                const configBuildTargetDisposable = cmakeApi.onBuildTargetChanged((target) => {
-                    this.cmakeTarget = target;
-                    vscode.commands.executeCommand<string>('cmake.buildDirectory')
-                        .then(targetDir => {
-                            this.cmakeBuildDirectory = targetDir || "";
-                            getExecutablePath(this.cmakeBuildType, this.cmakeBuildDirectory, this.cmakeTarget)
-                                .then(targetPath => {
-                                    if (targetPath !== null) {
-                                        this.cmakeLaunchTargetPath = targetPath || "";
-                                    }
-                                });
-
-                        });
-
-                });
-                const configDoneDisposable = cmakeApi.onActiveProjectChanged((projectUri) => {
-                    if (projectUri) {
-                        cmakeApi.getProject(projectUri).then(this.updateProject);
-                    }
-                });
-
-                cmakeApi.getProject(workspaceFolder.uri).then(this.updateProject);
-
-                this._disposables.push(configBuildTargetDisposable);
-                this._disposables.push(configDoneDisposable);
-            });
+        if (isActivateWorkspace) {
+            this.activateWorkspaceBaseOnCmakeSetting();
         }
+
     }
     private updateProject(project: Project | undefined): void {
         if (project) {
@@ -459,9 +472,11 @@ export class Config {
 
 // extend Config class to ExeConfig
 export class ExeConfig extends Config {
-    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config) => void) {
-        super(context, workspaceFolder, activeWorkspace);
+    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config | ExeConfig) => void) {
+        super(context, workspaceFolder, activeWorkspace, false);
+        this.type = ConfigType.ExeConfig;
         this.controllerId = "exe_test";
+        this.activateWorkspaceBaseOnCmakeSetting();
     }
     public get testRunUseFile(): boolean {
         return this.exe_testRunUseFile;
@@ -485,7 +500,13 @@ export class ExeConfig extends Config {
         return this._srcDirectory;
     }
     public get buildDirectory(): string {
-        return this._buildDirectory;
+        if (this.useCmakeTarget) {
+            return this.covert_file_path(this.cmakeBuildDirectory, "buildDirectory");
+        }
+        return this.covert_file_path(this._buildDirectory, "buildDirectory");
+    }
+    public get testrun_list_args(): string[] | undefined {
+        return this.exe_testrun_list_args;
     }
 
 }

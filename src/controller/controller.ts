@@ -1,17 +1,34 @@
 // src/controller.ts
 import * as vscode from 'vscode';
 import { MarkdownFileCoverage } from '../coverage';
-import { Config } from '../config';
+import { Config, ExeConfig, ConfigType } from '../config';
 import { runner } from '../runner';
 import { getTestRunHandler, loadDetailedCoverageHandler, getTestListHandler } from './resultHandler';
 
 
-const ctrl = vscode.tests.createTestController('exe_test', 'Cpp Executable Test');
+// todo
+const controllerId2ConfigTypeMap = new Map<string, ConfigType>([
+	['exe_test', ConfigType.ExeConfig],
+	['cdoctest', ConfigType.Config]
+]);
+// controllerIdToControllerMap is a map of controllerId to TestController
+const configType2ControllereMap = new Map<ConfigType, string>([
+	[ConfigType.ExeConfig, 'exe_test'],
+	[ConfigType.Config, 'cdoctest']
+]);
+const exeCtrl = vscode.tests.createTestController('exe_test', 'Cpp Executable Test');
 const cdocCtrl = vscode.tests.createTestController('cdoctest', 'codctest Test');
-let _config: Config | undefined;
+const controllerId2ControllerMap = new Map<string, vscode.TestController>([
+	['exe_test', exeCtrl],
+	['cdoctest', cdocCtrl]
+]);
+const configList: (Config | ExeConfig)[] = [];
 let refreshCancellationSource: vscode.CancellationTokenSource | undefined;
 let runCancellationSource: vscode.CancellationTokenSource | undefined;
 
+export function getConfigByController(ctrl: vscode.TestController): Config | ExeConfig | undefined {
+	return configList[controllerId2ConfigTypeMap.get(ctrl.id) as ConfigType];
+}
 
 async function _startTestRun(curCtrl: vscode.TestController, request: vscode.TestRunRequest, token: vscode.CancellationToken, isDebug: boolean) {
 	if (runCancellationSource === undefined) {
@@ -40,14 +57,14 @@ async function _startTestRun(curCtrl: vscode.TestController, request: vscode.Tes
 	testCasesToRun.forEach(test => run.enqueued(test));
 
 	const runTest = async (test: vscode.TestItem): Promise<void> => {
+		const config = configList[controllerId2ConfigTypeMap.get(curCtrl.id) as ConfigType];
 		if (runCancellationSource?.token.isCancellationRequested) {
 			run.skipped(test);
 			return;
 		}
-		if (_config === undefined) {
+		if (config === undefined) {
 			return;
 		}
-		const config = _config;
 		run.started(test);
 		try {
 			if (test.parent === undefined) {
@@ -100,9 +117,10 @@ export function _setupController(
 	curCtrl: vscode.TestController,
 	fileChangedEmitter: vscode.EventEmitter<vscode.Uri>,
 	context: vscode.ExtensionContext,
-	config: Config
+	config: Config | ExeConfig
 ) {
-	_config = config;
+	configList[controllerId2ConfigTypeMap.get(curCtrl.id) as ConfigType] = config;
+
 	context.subscriptions.push(curCtrl);
 
 	refreshCancellationSource = new vscode.CancellationTokenSource();
@@ -119,25 +137,28 @@ export function _setupController(
 	);
 
 	// Create debug profiles
-	curCtrl.createRunProfile(
-		'Debug Tests',
-		vscode.TestRunProfileKind.Debug,
-		getStartTestRun(curCtrl),
-		true,
-		undefined,
-		true
-	);
-
-	const coverageProfile = curCtrl.createRunProfile(
-		'Run with Coverage',
-		vscode.TestRunProfileKind.Coverage,
-		getStartTestRun(curCtrl),
-		true,
-		undefined,
-		true
-	);
-	coverageProfile.loadDetailedCoverage = loadDetailedCoverageHandler;
-
+	if (config.type === ConfigType.ExeConfig) {
+		curCtrl.createRunProfile(
+			'Debug Tests',
+			vscode.TestRunProfileKind.Debug,
+			getStartTestRun(curCtrl),
+			true,
+			undefined,
+			true
+		);
+	}
+	if (false) {
+		const coverageProfile = curCtrl.createRunProfile(
+			'Run with Coverage',
+			vscode.TestRunProfileKind.Coverage,
+			getStartTestRun(curCtrl),
+			true,
+			undefined,
+			true
+		);
+		coverageProfile.loadDetailedCoverage = loadDetailedCoverageHandler;
+	}
+	configList.push(config);
 	curCtrl.refreshHandler = async () => {
 		if (!vscode.workspace.workspaceFolders) {
 			return;
@@ -145,15 +166,22 @@ export function _setupController(
 		if (refreshCancellationSource === undefined) {
 			return;
 		}
-		runner(config.exe_testrun_list_args, config.buildDirectory, config.exe_listTestUseFile, config.exe_resultFile, config, refreshCancellationSource, getTestListHandler(curCtrl));
+		const ctrl = controllerId2ControllerMap.get(configType2ControllereMap.get(config.type) as string) as vscode.TestController;
+		runner(config.testrun_list_args, config.buildDirectory, config.listTestUseFile, config.resultFile, config, refreshCancellationSource,
+			getTestListHandler(ctrl));
 	};
 }
 
 export function setupController(
 	fileChangedEmitter: vscode.EventEmitter<vscode.Uri>,
 	context: vscode.ExtensionContext,
-	config: Config
+	config: Config | ExeConfig
 ) {
-	return _setupController(ctrl, fileChangedEmitter, context, config);
+	const cntr = controllerId2ControllerMap.get(configType2ControllereMap.get(config.type) as string);
+	if (cntr) {
+		return _setupController(cntr, fileChangedEmitter, context, config);
+	} else {
+		throw new Error('TestController not found for the given config type');
+	}
 }
 

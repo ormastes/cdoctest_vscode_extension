@@ -1,6 +1,6 @@
 // src/extension.ts
 import * as vscode from 'vscode';
-import { Config } from './config';
+import { Config, ExeConfig } from './config';
 import { MarkdownFileCoverage } from './coverage';
 import { setupController } from './controller/controller';
 import { initRunner } from './runner';
@@ -15,7 +15,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	const fileChangedEmitter = new vscode.EventEmitter<vscode.Uri>();
 	initRunner(context);
 
-	async function _ativeWorkspace(config: Config) {
+	async function _ativeWorkspace(config: Config | ExeConfig) {
 
 		// Call setupController to initialize the controller run profiles and handlers.
 		setupController(fileChangedEmitter, context, config);
@@ -41,7 +41,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		if (cdocConfig) {
 			cdocConfig.dispose();
 		}
-		exeConfig = await new Config(context, newWorkspace, _ativeWorkspace);
+		exeConfig = await new ExeConfig(context, newWorkspace, _ativeWorkspace);
 		cdocConfig = await new Config(context, newWorkspace, _ativeWorkspace);
 		checkCDocTestVersion(exeConfig).then(async(installed: any) => {
 			if (!installed) {

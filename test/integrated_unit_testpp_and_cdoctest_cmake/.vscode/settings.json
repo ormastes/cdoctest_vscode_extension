@@ -1,0 +1,8 @@
+{
+    ///"cdoctest.useCmakeTarget": false, // default is true
+    "cdoctest.pythonExePath": "C:/Python313/python.exe",
+    "cdoctest.libPaths": "C:/Python313/Lib/site-packages/clang_repl_kernel/clang/WinMG64/bin",
+    "files.associations": {
+        "xstring": "cpp"
+    },
+}
