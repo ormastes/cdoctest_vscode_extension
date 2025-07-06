@@ -528,10 +528,12 @@ export class Config {
                 console.log('CMake code model changed, refreshing tests...');
                 // Update build directory and executable path
                 project.getBuildDirectory().then(buildDir => {
-                    this.cmakeBuildDirectory = buildDir.fsPath || "";
-                    this.update_exe_executable().then(() => {
-                        this.activeWorkspace(this);
-                    });
+                    if (buildDir) {
+                        this.cmakeBuildDirectory = buildDir;
+                        this.update_exe_executable().then(() => {
+                            this.activeWorkspace(this);
+                        });
+                    }
                 });
             });
             this._disposables.push(codeModelDisposable);
@@ -543,10 +545,12 @@ export class Config {
                 project.getActiveBuildType().then(buildType => {
                     this.cmakeBuildType = buildType || "";
                     project.getBuildDirectory().then(buildDir => {
-                        this.cmakeBuildDirectory = buildDir.fsPath || "";
-                        this.update_exe_executable().then(() => {
-                            this.activeWorkspace(this);
-                        });
+                        if (buildDir) {
+                            this.cmakeBuildDirectory = buildDir;
+                            this.update_exe_executable().then(() => {
+                                this.activeWorkspace(this);
+                            });
+                        }
                     });
                 });
             });
