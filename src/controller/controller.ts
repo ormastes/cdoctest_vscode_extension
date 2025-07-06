@@ -141,7 +141,7 @@ export function _setupController(
 		curCtrl.createRunProfile(
 			'Debug Tests',
 			vscode.TestRunProfileKind.Debug,
-			getStartTestRun(curCtrl),
+			getStartDebugRun(curCtrl),
 			true,
 			undefined,
 			true

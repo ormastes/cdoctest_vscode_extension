@@ -7,7 +7,32 @@ out/
 # Test run output (if you use vscode-test)
 .vscode-test/
 
+playground/*
+!playground/**/README.md
 # Optional: distribution builds, logs, etc.
 dist/
 coverage/
 **/build/*
+
+# Test results and reports
+test-results/
+playwright-report/
+playwright-results.xml
+.nyc_output/
+.c8rc.json
+.nycrc.json
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.vsix
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+*.swp
+*.swo
