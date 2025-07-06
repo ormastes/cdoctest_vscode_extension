@@ -64,7 +64,11 @@ function addSpawnListeners(cdocRefreshProcess: ChildProcess, sessionName:string,
                 console.error(`Child process error processing remaining buffer: ${error}`);
             }
         }
+<<<<<<< HEAD
         handlClose(sessionName, sessionId, code || undefined);
+=======
+        handlClose(sessionName, sessionId);
+>>>>>>> 63d53b1 (Release version 0.1.0)
         resolve();
     });
 } catch (error) {

@@ -2,7 +2,7 @@
   "name": "cdoctest",
   "displayName": "cdoctest",
   "description": "Run cdocttest and executable tc runner.",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "publisher": "ormastes",
   "repository": "https://github.com/ormastes/cdoctest_vscode_extension",
   "engines": {
@@ -23,7 +23,12 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test",
-    "clean": "rimraf out *.vsix",
+    "test:e2e": "npm run compile && playwright test",
+    "test:e2e:ui": "npm run compile && playwright test --ui",
+    "test:coverage": "npm run compile && c8 --reporter=lcov --reporter=text npm run test",
+    "test:e2e:coverage": "npm run compile && c8 --reporter=lcov --reporter=text --reporter=html playwright test",
+    "coverage:report": "c8 report --reporter=html --reporter=text-summary",
+    "clean": "rimraf out *.vsix coverage .nyc_output playwright-report test-results",
     "build": "tsc",
     "rebuild": "npm run clean && npm run build",
     "package": "vsce package",
@@ -31,18 +36,22 @@
   },
   "dependencies": {
     "fast-glob": "^3.3.3",
-    "tslib": "^1.9.3",
-    "vscode-cmake-tools": "^1.2.0"
+    "tslib": "^1.9.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.53.2",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@types/vscode": "^1.97.0",
     "@typescript-eslint/eslint-plugin": "^8.22.0",
     "@typescript-eslint/parser": "^8.22.0",
     "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.4.1",
+    "@vscode/test-electron": "^2.5.2",
+    "c8": "^10.1.3",
     "eslint": "^9.19.0",
+    "nyc": "^17.1.0",
+    "playwright": "^1.53.2",
+    "sharp": "^0.34.2",
     "typescript": "^5.7.3"
   },
   "extensionDependencies": [

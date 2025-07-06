@@ -313,7 +313,11 @@ export class Config {
         }
         return this.covert_file_path(this._exe_executable, "exe_executable");
     }
+    
     public get bin_executable(): string {
+        if (this.useCmakeTarget) {
+            return this.cmakeLaunchTargetPath;
+        }
         return this.covert_file_path(this._bin_executable, "bin_executable");
     }
 
@@ -415,10 +419,29 @@ export class Config {
                     }
                 });
 
+                // Listen to launch target changes
+                const launchTargetDisposable = cmakeApi.onLaunchTargetChanged((target) => {
+                    console.log('CMake launch target changed:', target);
+                    this.cmakeTarget = target;
+                    // Update executable path for the new launch target
+                    vscode.commands.executeCommand<string>('cmake.buildDirectory')
+                        .then(targetDir => {
+                            this.cmakeBuildDirectory = targetDir || "";
+                            getExecutablePath(this.cmakeBuildType, this.cmakeBuildDirectory, this.cmakeTarget)
+                                .then(targetPath => {
+                                    if (targetPath !== null) {
+                                        this.cmakeLaunchTargetPath = targetPath || "";
+                                        this.activeWorkspace(this);
+                                    }
+                                });
+                        });
+                });
+
                 cmakeApi.getProject(this.workspaceFolder.uri).then(this.updateProject);
 
                 this._disposables.push(configBuildTargetDisposable);
                 this._disposables.push(configDoneDisposable);
+                this._disposables.push(launchTargetDisposable);
             });
         }
     }
@@ -500,6 +523,34 @@ export class Config {
                 this.activeWorkspace(this);
             });
 
+            // Listen to code model changes to refresh tests when CMake regenerates
+            const codeModelDisposable = project.onCodeModelChanged(() => {
+                console.log('CMake code model changed, refreshing tests...');
+                // Update build directory and executable path
+                project.getBuildDirectory().then(buildDir => {
+                    this.cmakeBuildDirectory = buildDir.fsPath || "";
+                    this.update_exe_executable().then(() => {
+                        this.activeWorkspace(this);
+                    });
+                });
+            });
+            this._disposables.push(codeModelDisposable);
+
+            // Listen to configuration changes (Kit/Preset changes)
+            const configDisposable = project.onSelectedConfigurationChanged((config) => {
+                console.log('CMake configuration changed:', config);
+                // Update build type and paths
+                project.getActiveBuildType().then(buildType => {
+                    this.cmakeBuildType = buildType || "";
+                    project.getBuildDirectory().then(buildDir => {
+                        this.cmakeBuildDirectory = buildDir.fsPath || "";
+                        this.update_exe_executable().then(() => {
+                            this.activeWorkspace(this);
+                        });
+                    });
+                });
+            });
+            this._disposables.push(configDisposable);
         }
     }
     public dispose(): void {
