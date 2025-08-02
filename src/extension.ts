@@ -47,28 +47,28 @@ export async function activate(context: vscode.ExtensionContext) {
 			if (!installed) {
 				console.error('Error checking cdoctest version not met minimum required version:', exeConfig?.cdoctest_min_version);
 				console.error('Please install the cdoctest on python by "python -m pip install --upgrade cdoctest".');
-				process.exit(1);
+				return;
 			} 
 			if (!await checkToolchainInstalled(exeConfig!)) {
 				console.error('Error checking cdoctest toolchain. Toolchain on cdoctest is not set or installed.');
 				console.error('Please install the toolchain on cdoctest by "python -m clang_repl_kernel --install-default-toolchain".');
-				process.exit(1);
+				return;
 			}
 
 			getToolchainDir(exeConfig!).then((toolChainDir: any) => {
 				if (!toolChainDir) {
 					console.error('Error getting toolchain of clang_repl_kernel directory. Toolchain on clang_repl_kernel is not set or installed.');
-					process.exit(1);
+					return;
 				}
 				console.log('Clang REPL kernel toolchain directory:', toolChainDir);
 				addNewToolchain(toolChainDir);
 			}).catch((error: any) => {
 				console.error('Error getting toolchain or clang_repl_kernel directory:', error);
-				process.exit(1);
+				return;
 			});
 		}).catch((error: any) => {
 			console.error('Error checking cdoctest version:', error);
-			process.exit(1);
+			return;
 		});
 	}
 	vscode.workspace.onDidChangeWorkspaceFolders(ativeWorkspace);

@@ -15,12 +15,7 @@ function addSpawnListeners(cdocRefreshProcess: ChildProcess, sessionName:string,
         resultFile:string, handlClose: (sessionName: string, sessionId: string) => Promise<void>, 
         resolve: () => void, reject: (reason?: any) => void) {
     try {
-    const childRl = readline.createInterface({
-        input: cdocRefreshProcess.stdout!,
-        output: process.stdout,
-        terminal: false
-    });
-    const result: string[] = [];
+    let buffer = '';
     const childLineHandler = (line: string) => {
         if (isUseFile) {
             console.log(`stdout: ${line}`);
@@ -29,9 +24,21 @@ function addSpawnListeners(cdocRefreshProcess: ChildProcess, sessionName:string,
         }
     };
 
-    childRl.on('line', (line) => {
+    cdocRefreshProcess.stdout?.on('data', (data) => {
         try {
-            childLineHandler(line);
+            buffer += data.toString();
+            const lines = buffer.split('\n');
+            // Keep the last part (might be incomplete line)
+            buffer = lines.pop() || '';
+            
+            // Process complete lines
+            for (const line of lines) {
+                 if (line.trim().toLowerCase().startsWith('warning:') || line.trim().toLowerCase().startsWith('error:')) {
+                    console.warn(`Warning/Error from child process: ${line}`);
+                    continue;
+                }
+                childLineHandler(line);
+            }
         } catch (error) {
             console.error(`Child process error: ${error}`);
             if (cdocRefreshProcess !== undefined) {
@@ -40,6 +47,7 @@ function addSpawnListeners(cdocRefreshProcess: ChildProcess, sessionName:string,
             reject(error);
         }
     });
+    
     cdocRefreshProcess.on('error', (error) => {
         console.error(`Child process error: ${error}`);
         if (cdocRefreshProcess !== undefined) {
@@ -48,6 +56,14 @@ function addSpawnListeners(cdocRefreshProcess: ChildProcess, sessionName:string,
         reject(error);
     });
     cdocRefreshProcess.on('close', async (code) => {
+        // Process any remaining buffer content
+        if (buffer.length > 0) {
+            try {
+                childLineHandler(buffer);
+            } catch (error) {
+                console.error(`Child process error processing remaining buffer: ${error}`);
+            }
+        }
         handlClose(sessionName, sessionId);
         resolve();
     });
