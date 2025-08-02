@@ -154,11 +154,12 @@ export async function getExecutablePath(buildType: string, buildDir: string, tar
     return _getDllExecutablePath('.exe', reply, buildType, normalizedBuildDir, targetName);
 }
 
-// config enum for Config | ExeConfig | BinConfig 0: Config, 1: ExeConfig, 2: BinConfig
+// config enum for Config | ExeConfig | BinConfig | CMakeConfig 0: Config, 1: ExeConfig, 2: BinConfig, 3: CMakeConfig
 export enum ConfigType {
     Config = 0,
     ExeConfig = 1,
-    BinConfig = 2
+    BinConfig = 2,
+    CMakeConfig = 3
 }
 
 // # test run variable 
@@ -211,21 +212,23 @@ export class Config {
     public testcaseSeparator: string;
     public exe_testcaseSeparator: string;
     public bin_testcaseSeparator: string;
+    public useCTestDiscovery: boolean;
+    public ctestUseExitCode: boolean;
 
     private _disposables: vscode.Disposable[] = [];
 
     public cmakeProject: Project | undefined;
     private cmakeTarget: string = "";
-    private cmakeSrcDirectory: string = "";
+    protected cmakeSrcDirectory: string = "";
     protected cmakeBuildDirectory: string = "";
     private cmakeLaunchTargetPath: string = "";
-    private cmakeBuildType: string = "";
+    public cmakeBuildType: string = "";
 
     private skipWords: string[] = [];
 
     private cmakeApi: CMakeToolsApi | undefined;
 
-    private activeWorkspace!: (config: Config | ExeConfig | BinConfig) => void | undefined;
+    private activeWorkspace!: (config: Config | ExeConfig | BinConfig | CMakeConfig) => void | undefined;
 
     protected covert_file_path(file: string, skipWord: string): string {
         this.skipWords.push(skipWord);
@@ -395,7 +398,7 @@ export class Config {
                     this.cmakeTarget = target;
                     vscode.commands.executeCommand<string>('cmake.buildDirectory')
                         .then(targetDir => {
-                            this.cmakeBuildDirectory = targetDir || "";
+                            this.cmakeBuildDirectory = targetDir;
                             getExecutablePath(this.cmakeBuildType, this.cmakeBuildDirectory, this.cmakeTarget)
                                 .then(targetPath => {
                                     if (targetPath !== null) {
@@ -420,7 +423,7 @@ export class Config {
         }
     }
 
-    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config|ExeConfig|BinConfig) => void, isActivateWorkspace:boolean = true) {
+    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config|ExeConfig|BinConfig|CMakeConfig) => void, isActivateWorkspace:boolean = true) {
         this.type = ConfigType.Config;
         this.workspaceFolder = workspaceFolder;
         this.controllerId = "cdoctest";
@@ -454,31 +457,33 @@ export class Config {
         this.testcaseSeparator = vscode.workspace.getConfiguration('cdoctest').get('testcaseSeparator') as string;
         this.exe_testcaseSeparator = vscode.workspace.getConfiguration('cdoctest').get('exe_testcaseSeparator') as string;
         this.bin_testcaseSeparator = vscode.workspace.getConfiguration('cdoctest').get('bin_testcaseSeparator') as string;
+        this.useCTestDiscovery = vscode.workspace.getConfiguration('cdoctest').get('useCTestDiscovery') as boolean;
+        this.ctestUseExitCode = vscode.workspace.getConfiguration('cdoctest').get('ctestUseExitCode') as boolean;
 
         this.updateProject = this.updateProject.bind(this);
 
         if (this._pythonExePath === '') {
-            throw new Error('cdoctest: pythonExePath must be set');
+            console.error('cdoctest: pythonExePath must be set');
         }
         this.activeWorkspace = activeWorkspace;
 
         if (this.useCmakeTarget) {
             // assert _srcDirectory and _buildDirectory are empty
             if (this._srcDirectory !== '' || this._buildDirectory !== '') {
-                throw new Error('cdoctest: srcDirectory and buildDirectory must be empty when useCmakeTarget is true');
+                console.error('cdoctest: srcDirectory and buildDirectory must be empty when useCmakeTarget is true');
             }
             // assert _executable and _exe_executable are empty
             if (this._executable !== '' || this._exe_executable !== '') {
-                throw new Error('cdoctest: executable and exe_executable must be empty when useCmakeTarget is true');
+                console.error('cdoctest: executable and exe_executable must be empty when useCmakeTarget is true');
             }
         } else {
             // assert _srcDirectory and _buildDirectory are not empty
             if (this._srcDirectory === '' || this._buildDirectory === '') {
-                throw new Error('cdoctest: srcDirectory and buildDirectory must be set when useCmakeTarget is false');
+                console.error('cdoctest: srcDirectory and buildDirectory must be set when useCmakeTarget is false');
             }
             // assert _executable and _exe_executable are not empty
             if (this._executable === '' && this._exe_executable === '') {
-                throw new Error('cdoctest: executable or exe_executable must be set when useCmakeTarget is false');
+                console.error('cdoctest: executable or exe_executable must be set when useCmakeTarget is false');
             }
         }
         if (isActivateWorkspace) {
@@ -505,7 +510,7 @@ export class Config {
 
 // extend Config class to ExeConfig
 export class ExeConfig extends Config {
-    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config | ExeConfig | BinConfig) => void) {
+    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config | ExeConfig | BinConfig | CMakeConfig) => void) {
         super(context, workspaceFolder, activeWorkspace, false);
         this.type = ConfigType.ExeConfig;
         this.controllerId = "exe_test";
@@ -546,7 +551,7 @@ export class ExeConfig extends Config {
 
 // extend Config class to BinConfig
 export class BinConfig extends Config {
-    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config | ExeConfig | BinConfig) => void) {
+    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config | ExeConfig | BinConfig | CMakeConfig) => void) {
         super(context, workspaceFolder, activeWorkspace, false);
         this.type = ConfigType.BinConfig;
         this.controllerId = "bin_test";
@@ -581,5 +586,64 @@ export class BinConfig extends Config {
     }
     public get testrun_list_args(): string[] | undefined {
         return this.bin_testrun_list_args;
+    }
+}
+
+// CMakeConfig class for CMake-specific configuration
+export class CMakeConfig extends Config {
+    public cmakeCommand: string;
+    public cmakeGenerator: string;
+
+    public cmakeConfigureArgs: string;
+    public cmakeBuildArgs: string;
+
+
+    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config | ExeConfig | BinConfig | CMakeConfig) => void) {
+        super(context, workspaceFolder, activeWorkspace, false);
+        this.type = ConfigType.CMakeConfig;
+        this.controllerId = "cmake_test";
+        
+        // Read CMake-specific configuration
+        this.cmakeCommand = vscode.workspace.getConfiguration('cdoctest').get('cmakeCommand') as string || 'cmake';
+        this.cmakeGenerator = vscode.workspace.getConfiguration('cdoctest').get('cmakeGenerator') as string || '';
+        this.cmakeConfigureArgs = vscode.workspace.getConfiguration('cdoctest').get('cmakeConfigureArgs') as string || '';
+        this.cmakeBuildArgs = vscode.workspace.getConfiguration('cdoctest').get('cmakeBuildArgs') as string || '';
+        
+        
+        this.activateWorkspaceBaseOnCmakeSetting();
+    }
+    
+    // Get full cmake configure command
+    public getCMakeConfigureCommand(): string[] {
+        const args = [this.cmakeCommand, '-S', this.cmakeSrcDirectory, '-B', this.cmakeBuildDirectory];
+        
+        if (this.cmakeGenerator) {
+            args.push('-G', this.cmakeGenerator);
+        }
+        
+        if (this.cmakeBuildType) {
+            args.push('-DCMAKE_BUILD_TYPE=' + this.cmakeBuildType);
+        }
+        
+        if (this.cmakeConfigureArgs) {
+            args.push(...this.cmakeConfigureArgs.split(' ').filter(arg => arg.length > 0));
+        }
+        
+        return args;
+    }
+    
+    // Get full cmake build command
+    public getCMakeBuildCommand(): string[] {
+        const args = [this.cmakeCommand, '--build', this.cmakeBuildDirectory];
+        
+        if (this.cmakeBuildType) {
+            args.push('--config', this.cmakeBuildType);
+        }
+        
+        if (this.cmakeBuildArgs) {
+            args.push(...this.cmakeBuildArgs.split(' ').filter(arg => arg.length > 0));
+        }
+        
+        return args;
     }
 }

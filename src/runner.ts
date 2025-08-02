@@ -12,7 +12,7 @@ function addStdoutLine(sessionId: string, line: string) {
     stdoutLines[sessionId].push(line);
 }
 function addSpawnListeners(cdocRefreshProcess: ChildProcess, sessionName:string, sessionId: string,  isUseFile:boolean, 
-        resultFile:string, handlClose: (sessionName: string, sessionId: string) => Promise<void>, 
+        resultFile:string, handlClose: (sessionName: string, sessionId: string, exitCode?: number) => Promise<void>, 
         resolve: () => void, reject: (reason?: any) => void) {
     try {
     let buffer = '';
@@ -64,7 +64,7 @@ function addSpawnListeners(cdocRefreshProcess: ChildProcess, sessionName:string,
                 console.error(`Child process error processing remaining buffer: ${error}`);
             }
         }
-        handlClose(sessionName, sessionId);
+        handlClose(sessionName, sessionId, code || undefined);
         resolve();
     });
 } catch (error) {
@@ -130,7 +130,7 @@ export async function launchDebugSessionWithCloseHandler(
     args: string[],
     workingDirectory: string,
     resultFile: string,
-    resultHandler: ((result: string) => void),
+    resultHandler: ((result: string, exitCode?: number) => void),
     resolve: ()=>void,
     reject: (reason?: any) => void,
     envVars: { [key: string]: string },
@@ -160,22 +160,25 @@ export async function launchDebugSessionWithCloseHandler(
     debugConfig.cwd = workingDirectory;
     debugConfig.env = envVars;
 
-    async function handlClose(sessionName: string, sessionId:string): Promise<void> {
+    async function handlClose(sessionName: string, sessionId:string, exitCode?: number): Promise<void> {
         // Filter based on the session name (or you could use session.id if preferred).
         if (sessionName === debugConfig.name) {
             console.log(`Debug session "${sessionName}" has terminated with exit code (if available)`);
             // Perform any cleanup or further actions here.
             if (isUseFile) {
                 if (! await fileExists(vscode.Uri.file(resultFile))) {
+                    // If no result file, pass exit code if available
+                    resultHandler('', exitCode);
                     return;
                 }
-                await getResultFromFile(resultFile, resultHandler, reject);
+                await getResultFromFile(resultFile, resultHandler, reject, exitCode);
             } else {
                 if (!stdoutLines[sessionId]) {
+                    resultHandler('', exitCode);
                     return;
                 }
                 let output = stdoutLines[sessionId].join('\n');
-                resultHandler(output);
+                resultHandler(output, exitCode);
             }
             // Clear the stored output for this session.
             if (stdoutLines[sessionId]) {
@@ -194,11 +197,20 @@ export async function launchDebugSessionWithCloseHandler(
     }
     // capture session start event
     const result = vscode.debug.onDidStartDebugSession(async (session) => {
+        // Only handle sessions that match our configuration
+        if (session.configuration.name !== debugConfig.name || 
+            (debugConfig.type === 'lldb-dap' && session.type !== 'lldb-dap')) {
+            return;
+        }
         initStdout(session.id);
         // Attach a listener for when any debug session terminates.
-        const terminationListener = vscode.debug.onDidTerminateDebugSession(async (session) => {
-            await handlClose(session.name, session.id);
-            terminationListener.dispose();
+        const terminationListener = vscode.debug.onDidTerminateDebugSession(async (terminatedSession) => {
+            // Only handle our specific session
+            if (terminatedSession.id === session.id) {
+                // Debug sessions don't provide exit codes directly
+                await handlClose(terminatedSession.name, terminatedSession.id, undefined);
+                terminationListener.dispose();
+            }
         });
         // remove the listener
         result.dispose();
@@ -251,7 +263,7 @@ export function runProgramWithLibPaths(
     libPaths: string,
     buildDirectory: string,
     resultFile: string,
-    resultHandler: ((result: string) => void),
+    resultHandler: ((result: string, exitCode?: number) => void),
     resolve: ()=>void,
     reject: (reason?: any) => void,
     isUseFile: boolean,
@@ -296,7 +308,7 @@ export function runProgramWithLibPaths(
 
 
 export async function runner(run_args: string[] | undefined, buildDirectory: string, isUseFile: boolean, resultFile: string, config: Config, 
-        cancelSource: vscode.CancellationTokenSource | undefined, resultHandler: ((result: string) => void), isDebug:boolean = false): Promise<void> {
+        cancelSource: vscode.CancellationTokenSource | undefined, resultHandler: ((result: string, exitCode?: number) => void), isDebug:boolean = false): Promise<void> {
     if (!run_args) {
         return;
     }
@@ -354,13 +366,13 @@ export async function runner(run_args: string[] | undefined, buildDirectory: str
     });
 }
 
-async function getResultFromFile(resultFile: string, resultHandler: (result: string) => void, reject: (reason?: any) => void) {
+async function getResultFromFile(resultFile: string, resultHandler: (result: string, exitCode?: number) => void, reject: (reason?: any) => void, exitCode?: number) {
     const resultUri = vscode.Uri.file(resultFile);
     // read resultUri and make testList string
     try {
         const resultBuffer = await vscode.workspace.fs.readFile(resultUri);
         const testList = Buffer.from(resultBuffer).toString('utf-8');
-        resultHandler(testList);
+        resultHandler(testList, exitCode);
     } catch (error) {
         console.error(`Error reading result file: ${error}`);
         reject(error);

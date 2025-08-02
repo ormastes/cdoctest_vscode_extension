@@ -1,36 +1,41 @@
 // src/controller.ts
 import * as vscode from 'vscode';
 import { MarkdownFileCoverage } from '../coverage';
-import { Config, ExeConfig, BinConfig, ConfigType } from '../config';
+import { Config, ExeConfig, BinConfig, CMakeConfig, ConfigType } from '../config';
 import { runner } from '../runner';
-import { getTestRunHandler, loadDetailedCoverageHandler, getTestListHandler } from './resultHandler';
+import { getTestRunHandler, getTestRunHandlerWithExitCode, loadDetailedCoverageHandler, getTestListHandler, getCTestDiscoveryHandler, getCTestDataForTest } from './resultHandler';
+import { CTestParser } from '../tclist_parser/ctestParser';
 
 
 // todo
 const controllerId2ConfigTypeMap = new Map<string, ConfigType>([
 	['exe_test', ConfigType.ExeConfig],
 	['cdoctest', ConfigType.Config],
-	['bin_test', ConfigType.BinConfig]
+	['bin_test', ConfigType.BinConfig],
+	['cmake_test', ConfigType.CMakeConfig]
 ]);
 // controllerIdToControllerMap is a map of controllerId to TestController
 const configType2ControllereMap = new Map<ConfigType, string>([
 	[ConfigType.ExeConfig, 'exe_test'],
 	[ConfigType.Config, 'cdoctest'],
-	[ConfigType.BinConfig, 'bin_test']
+	[ConfigType.BinConfig, 'bin_test'],
+	[ConfigType.CMakeConfig, 'cmake_test']
 ]);
 const exeCtrl = vscode.tests.createTestController('exe_test', 'Cpp Executable Test');
 const cdocCtrl = vscode.tests.createTestController('cdoctest', 'codctest Test');
 const binCtrl = vscode.tests.createTestController('bin_test', 'Binary Test');
+const cmakeCtrl = vscode.tests.createTestController('cmake_test', 'CMake Test');
 const controllerId2ControllerMap = new Map<string, vscode.TestController>([
 	['exe_test', exeCtrl],
 	['cdoctest', cdocCtrl],
-	['bin_test', binCtrl]
+	['bin_test', binCtrl],
+	['cmake_test', cmakeCtrl]
 ]);
-const configList: (Config | ExeConfig | BinConfig)[] = [];
+const configList: (Config | ExeConfig | BinConfig | CMakeConfig)[] = [];
 let refreshCancellationSource: vscode.CancellationTokenSource | undefined;
 let runCancellationSource: vscode.CancellationTokenSource | undefined;
 
-export function getConfigByController(ctrl: vscode.TestController): Config | ExeConfig | BinConfig | undefined {
+export function getConfigByController(ctrl: vscode.TestController): Config | ExeConfig | BinConfig | CMakeConfig | undefined {
 	return configList[controllerId2ConfigTypeMap.get(ctrl.id) as ConfigType];
 }
 
@@ -75,22 +80,52 @@ async function _startTestRun(curCtrl: vscode.TestController, request: vscode.Tes
 				run.failed(test, new Error('Test parent is undefined'), 1000);
 				return;
 			}
-			const argDict = {
-				'test_full_name': test.id,
-				'test_suite_name': test.parent.id,
-				'test_case_name': test.label
-			};
+			
+			// Check if we have CTest data for this test
+			const ctestData = getCTestDataForTest(test.id);
+			let executableArgs: string[] | undefined;
+			let workingDir: string;
+			let resultFile: string = config.exe_resultFile;
+			let useExitCodeHandler = false;
+			
+			if (ctestData && config.useCTestDiscovery && config.useCmakeTarget) {
+				// Use CTest data for execution
+				executableArgs = [ctestData.executable, ...ctestData.args];
+				workingDir = ctestData.workingDirectory || config.buildDirectory;
+				// When using CTest, we can rely on exit codes if configured
+				useExitCodeHandler = config.ctestUseExitCode;
+				
+				// Adjust result file based on test framework if needed
+				if (ctestData.testFramework) {
+					// Different frameworks might have different result file patterns
+					// For now, use the same result file, but this can be customized per framework
+					console.log(`Running ${ctestData.testFramework} test: ${test.id}`);
+				}
+			} else {
+				// Fall back to traditional execution
+				const argDict = {
+					'test_full_name': test.id,
+					'test_suite_name': test.parent.id,
+					'test_case_name': test.label
+				};
+				executableArgs = config.get_exe_testrun_executable_args(argDict);
+				workingDir = config.buildDirectory;
+			}
 
 			// Wrap the runner call in a Promise so that we wait for the result.
 			await new Promise<void>((resolve, reject) => {
+				const handler = useExitCodeHandler 
+					? getTestRunHandlerWithExitCode(test, config, run, resolve)
+					: getTestRunHandler(test, config, run, resolve);
+				
 				runner(
-					config.get_exe_testrun_executable_args(argDict),
-					config.buildDirectory,
+					executableArgs,
+					workingDir,
 					config.exe_testRunUseFile,
-					config.exe_resultFile,
+					resultFile,
 					config,
 					refreshCancellationSource,
-					getTestRunHandler(test, config, run, resolve),
+					handler,
 					isDebug
 				);
 			});
@@ -121,7 +156,7 @@ export function _setupController(
 	curCtrl: vscode.TestController,
 	fileChangedEmitter: vscode.EventEmitter<vscode.Uri>,
 	context: vscode.ExtensionContext,
-	config: Config | ExeConfig | BinConfig
+	config: Config | ExeConfig | BinConfig | CMakeConfig
 ) {
 	configList[controllerId2ConfigTypeMap.get(curCtrl.id) as ConfigType] = config;
 
@@ -171,15 +206,37 @@ export function _setupController(
 			return;
 		}
 		const ctrl = controllerId2ControllerMap.get(configType2ControllereMap.get(config.type) as string) as vscode.TestController;
-		runner(config.testrun_list_args, config.buildDirectory, config.listTestUseFile, config.resultFile, config, refreshCancellationSource,
-			getTestListHandler(ctrl));
+		
+		// Use CTest discovery if enabled and using CMake
+		if (config.type === ConfigType.CMakeConfig) {
+			try {
+				await getCTestDiscoveryHandler(ctrl, config);
+				
+				// Set up file watcher for CTest files
+				const buildType = config.cmakeBuildType || "";
+				const parser = new CTestParser(config);
+				const watcher = await parser.watchForChanges(async () => {
+					await getCTestDiscoveryHandler(ctrl, config);
+				});
+				context.subscriptions.push(watcher);
+			} catch (error) {
+				console.error('CTest discovery failed, falling back to executable:', error);
+				// Fall back to running executable
+				runner(config.testrun_list_args, config.buildDirectory, config.listTestUseFile, config.resultFile, config, refreshCancellationSource,
+					getTestListHandler(ctrl));
+			}
+		} else {
+			// Use traditional executable-based discovery
+			runner(config.testrun_list_args, config.buildDirectory, config.listTestUseFile, config.resultFile, config, refreshCancellationSource,
+				getTestListHandler(ctrl));
+		}
 	};
 }
 
 export function setupController(
 	fileChangedEmitter: vscode.EventEmitter<vscode.Uri>,
 	context: vscode.ExtensionContext,
-	config: Config | ExeConfig | BinConfig
+	config: Config | ExeConfig | BinConfig | CMakeConfig
 ) {
 	const cntr = controllerId2ControllerMap.get(configType2ControllereMap.get(config.type) as string);
 	if (cntr) {

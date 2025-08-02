@@ -3,11 +3,34 @@ import * as path from 'path';
 import { Config } from '../config';
 import { MarkdownFileCoverage } from '../coverage';
 import { getConfigByController } from './controller';
+import { CTestParser, CTestCase } from '../tclist_parser/ctestParser';
 
+// Store CTest data for test execution
+const ctestDataMap = new Map<string, CTestCase>();
 
 export function getTestRunHandler( test: vscode.TestItem, config: Config, run: vscode.TestRun,  resolve: () => void): ((result: string) => void) {
     return (result: string): void => {
         if (result.match(config.resultSuccessRgex)) {
+            run.passed(test, 1000);
+        } else {
+            console.error(`Test failed: ${result}`);
+            run.failed(test, new Error(`Test failed: ${result}`), 1000);
+        }
+        resolve();
+    };
+}
+
+export function getTestRunHandlerWithExitCode( test: vscode.TestItem, config: Config, run: vscode.TestRun,  resolve: () => void): ((result: string, exitCode?: number) => void) {
+    return (result: string, exitCode?: number): void => {
+        // When using CTest discovery, we may only have exit code
+        if (exitCode !== undefined) {
+            if (exitCode === 0) {
+                run.passed(test, 1000);
+            } else {
+                console.error(`Test failed with exit code ${exitCode}: ${result}`);
+                run.failed(test, new Error(`Test failed with exit code ${exitCode}: ${result}`), 1000);
+            }
+        } else if (result.match(config.resultSuccessRgex)) {
             run.passed(test, 1000);
         } else {
             console.error(`Test failed: ${result}`);
@@ -92,6 +115,96 @@ export function getTestListHandler(ctrl: vscode.TestController): (result: string
         const lines = result.split('\n');
         lines.forEach(testListLineHandler);
     };
+}
+
+export async function getCTestDiscoveryHandler(ctrl: vscode.TestController, config: Config): Promise<void> {
+    const buildType = config.cmakeBuildType || "";
+    const parser = new CTestParser(config);
+    const result = await parser.parse();
+    
+    if (result.errors.length > 0) {
+        console.error('CTest parsing errors:', result.errors);
+    }
+    
+    // Clear existing items
+    ctrl.items.replace([]);
+    
+    // Group tests by fixture/suite
+    const testsByFixture = new Map<string, CTestCase[]>();
+    
+    for (const test of result.tests) {
+        let fixture = 'default';
+        let testName = test.name;
+        
+        // Extract fixture and test name from test.name or test.testFullName
+        const fullName = test.testFullName || test.name;
+        const lastColon = fullName.lastIndexOf('::');
+        
+        if (lastColon !== -1) {
+            fixture = fullName.slice(0, lastColon);
+            testName = fullName.slice(lastColon + 2);
+        }
+        
+        if (!testsByFixture.has(fixture)) {
+            testsByFixture.set(fixture, []);
+        }
+        testsByFixture.get(fixture)!.push(test);
+    }
+    
+    // Create test items
+    for (const [fixtureName, tests] of testsByFixture) {
+        let fixtureItem = ctrl.items.get(fixtureName);
+        
+        if (!fixtureItem) {
+            // Use the first test's file as the fixture URI
+            const firstTest = tests[0];
+            const uri = firstTest.testFile 
+                ? vscode.Uri.file(firstTest.testFile)
+                : vscode.Uri.file(firstTest.executable);
+                
+            fixtureItem = ctrl.createTestItem(fixtureName, fixtureName, uri);
+            fixtureItem.canResolveChildren = true;
+            ctrl.items.add(fixtureItem);
+        }
+        
+        for (const test of tests) {
+            const fullTestId = test.testFullName || test.name;
+            let testItem = fixtureItem.children.get(fullTestId);
+            
+            if (!testItem) {
+                const uri = test.testFile 
+                    ? vscode.Uri.file(test.testFile)
+                    : vscode.Uri.file(test.executable);
+                    
+                const testLabel = fullTestId.includes('::') 
+                    ? fullTestId.split('::').pop()! 
+                    : test.name;
+                    
+                testItem = ctrl.createTestItem(fullTestId, testLabel, uri);
+                
+                if (test.testLine) {
+                    testItem.range = new vscode.Range(
+                        test.testLine - 1, 0, 
+                        test.testLine - 1, 0
+                    );
+                }
+                
+                // Store CTest data for later use during test execution
+                ctestDataMap.set(fullTestId, test);
+                
+                // Add test framework as a tag if available
+                if (test.testFramework) {
+                    testItem.tags = [new vscode.TestTag(test.testFramework)];
+                }
+                
+                fixtureItem.children.add(testItem);
+            }
+        }
+    }
+}
+
+export function getCTestDataForTest(testId: string): CTestCase | undefined {
+    return ctestDataMap.get(testId);
 }
 
 
