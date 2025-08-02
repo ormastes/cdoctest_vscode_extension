@@ -1,6 +1,6 @@
 // src/extension.ts
 import * as vscode from 'vscode';
-import { Config, ExeConfig } from './config';
+import { Config, ExeConfig, BinConfig } from './config';
 import { MarkdownFileCoverage } from './coverage';
 import { setupController } from './controller/controller';
 import { initRunner } from './runner';
@@ -9,13 +9,14 @@ import { checkCDocTestVersion, getToolchainDir,  addNewToolchain, checkToolchain
 
 let exeConfig: Config | undefined;
 let cdocConfig: Config | undefined;
+let binConfig: Config | undefined;
 let lastWorkspace: vscode.WorkspaceFolder | undefined;
 
 export async function activate(context: vscode.ExtensionContext) {
 	const fileChangedEmitter = new vscode.EventEmitter<vscode.Uri>();
 	initRunner(context);
 
-	async function _ativeWorkspace(config: Config | ExeConfig) {
+	async function _ativeWorkspace(config: Config | ExeConfig | BinConfig) {
 
 		// Call setupController to initialize the controller run profiles and handlers.
 		setupController(fileChangedEmitter, context, config);
@@ -41,8 +42,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		if (cdocConfig) {
 			cdocConfig.dispose();
 		}
+		if (binConfig) {
+			binConfig.dispose();
+		}
 		exeConfig = await new ExeConfig(context, newWorkspace, _ativeWorkspace);
 		cdocConfig = await new Config(context, newWorkspace, _ativeWorkspace);
+		binConfig = await new BinConfig(context, newWorkspace, _ativeWorkspace);
 		checkCDocTestVersion(exeConfig).then(async(installed: any) => {
 			if (!installed) {
 				console.error('Error checking cdoctest version not met minimum required version:', exeConfig?.cdoctest_min_version);

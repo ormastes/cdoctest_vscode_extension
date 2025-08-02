@@ -1,7 +1,7 @@
 // src/controller.ts
 import * as vscode from 'vscode';
 import { MarkdownFileCoverage } from '../coverage';
-import { Config, ExeConfig, ConfigType } from '../config';
+import { Config, ExeConfig, BinConfig, ConfigType } from '../config';
 import { runner } from '../runner';
 import { getTestRunHandler, loadDetailedCoverageHandler, getTestListHandler } from './resultHandler';
 
@@ -9,24 +9,28 @@ import { getTestRunHandler, loadDetailedCoverageHandler, getTestListHandler } fr
 // todo
 const controllerId2ConfigTypeMap = new Map<string, ConfigType>([
 	['exe_test', ConfigType.ExeConfig],
-	['cdoctest', ConfigType.Config]
+	['cdoctest', ConfigType.Config],
+	['bin_test', ConfigType.BinConfig]
 ]);
 // controllerIdToControllerMap is a map of controllerId to TestController
 const configType2ControllereMap = new Map<ConfigType, string>([
 	[ConfigType.ExeConfig, 'exe_test'],
-	[ConfigType.Config, 'cdoctest']
+	[ConfigType.Config, 'cdoctest'],
+	[ConfigType.BinConfig, 'bin_test']
 ]);
 const exeCtrl = vscode.tests.createTestController('exe_test', 'Cpp Executable Test');
 const cdocCtrl = vscode.tests.createTestController('cdoctest', 'codctest Test');
+const binCtrl = vscode.tests.createTestController('bin_test', 'Binary Test');
 const controllerId2ControllerMap = new Map<string, vscode.TestController>([
 	['exe_test', exeCtrl],
-	['cdoctest', cdocCtrl]
+	['cdoctest', cdocCtrl],
+	['bin_test', binCtrl]
 ]);
-const configList: (Config | ExeConfig)[] = [];
+const configList: (Config | ExeConfig | BinConfig)[] = [];
 let refreshCancellationSource: vscode.CancellationTokenSource | undefined;
 let runCancellationSource: vscode.CancellationTokenSource | undefined;
 
-export function getConfigByController(ctrl: vscode.TestController): Config | ExeConfig | undefined {
+export function getConfigByController(ctrl: vscode.TestController): Config | ExeConfig | BinConfig | undefined {
 	return configList[controllerId2ConfigTypeMap.get(ctrl.id) as ConfigType];
 }
 
@@ -117,7 +121,7 @@ export function _setupController(
 	curCtrl: vscode.TestController,
 	fileChangedEmitter: vscode.EventEmitter<vscode.Uri>,
 	context: vscode.ExtensionContext,
-	config: Config | ExeConfig
+	config: Config | ExeConfig | BinConfig
 ) {
 	configList[controllerId2ConfigTypeMap.get(curCtrl.id) as ConfigType] = config;
 
@@ -175,7 +179,7 @@ export function _setupController(
 export function setupController(
 	fileChangedEmitter: vscode.EventEmitter<vscode.Uri>,
 	context: vscode.ExtensionContext,
-	config: Config | ExeConfig
+	config: Config | ExeConfig | BinConfig
 ) {
 	const cntr = controllerId2ControllerMap.get(configType2ControllereMap.get(config.type) as string);
 	if (cntr) {

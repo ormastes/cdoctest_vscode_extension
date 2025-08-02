@@ -154,10 +154,11 @@ export async function getExecutablePath(buildType: string, buildDir: string, tar
     return _getDllExecutablePath('.exe', reply, buildType, normalizedBuildDir, targetName);
 }
 
-// config enum for Config | ExeConfig 0: Config, 1: ExeConfig
+// config enum for Config | ExeConfig | BinConfig 0: Config, 1: ExeConfig, 2: BinConfig
 export enum ConfigType {
     Config = 0,
-    ExeConfig = 1
+    ExeConfig = 1,
+    BinConfig = 2
 }
 
 // # test run variable 
@@ -186,21 +187,30 @@ export class Config {
     public _listTestArgPattern: string;
     public _exe_testRunArgPattern: string;
     public _exe_listTestArgPattern: string;
+    public _bin_testRunArgPattern: string;
+    public _bin_listTestArgPattern: string;
     public _resultFile: string;
     public _exe_resultFile: string;
+    public _bin_resultFile: string;
     public _resultSuccessRgex: string;
 
     public _srcDirectory: string;
     public _buildDirectory: string;
     public _executable: string;
     public _exe_executable: string;
+    public _bin_executable: string;
 
     public _testRunUseFile: boolean;
     public _listTestUseFile: boolean;
     public exe_testRunUseFile: boolean;
     public exe_listTestUseFile: boolean;
+    public bin_testRunUseFile: boolean;
+    public bin_listTestUseFile: boolean;
     public libPaths: string;
     public configName: string;
+    public testcaseSeparator: string;
+    public exe_testcaseSeparator: string;
+    public bin_testcaseSeparator: string;
 
     private _disposables: vscode.Disposable[] = [];
 
@@ -215,7 +225,7 @@ export class Config {
 
     private cmakeApi: CMakeToolsApi | undefined;
 
-    private activeWorkspace!: (config: Config | ExeConfig) => void | undefined;
+    private activeWorkspace!: (config: Config | ExeConfig | BinConfig) => void | undefined;
 
     protected covert_file_path(file: string, skipWord: string): string {
         this.skipWords.push(skipWord);
@@ -248,19 +258,23 @@ export class Config {
         }
         return result;
     }
-    public _get_testrun_executable_args(executable: string, additionalEnv: { [key: string]: string }): string[] {
-        additionalEnv['test_full_name'] = additionalEnv['test_suite_name'] + '::' + additionalEnv['test_case_name'];
+    public _get_testrun_executable_args(executable: string, testSeparator: string, additionalEnv: { [key: string]: string }): string[] {
+        additionalEnv['test_full_name'] = additionalEnv['test_suite_name'] + testSeparator + additionalEnv['test_case_name'];
         let result = this.convert(executable, additionalEnv);
         return result.split(' ');
     }
 
     public get_exe_testrun_executable_args(additionalEnv: { [key: string]: string }): string[] | undefined {
         if (this.exe_executable === "") { return undefined; }
-        return this._get_testrun_executable_args(this.exe_executable + ' ' + this._exe_testRunArgPattern, additionalEnv);
+        return this._get_testrun_executable_args(this.exe_executable + ' ' + this._exe_testRunArgPattern, this.exe_testcaseSeparator, additionalEnv);
+    }
+    public get_bin_testrun_executable_args(additionalEnv: { [key: string]: string }): string[] | undefined {
+        if (this.bin_executable === "") { return undefined; }
+        return this._get_testrun_executable_args(this.bin_executable + ' ' + this._bin_testRunArgPattern, this.bin_testcaseSeparator, additionalEnv);
     }
     public get_testrun_executable_args(additionalEnv: { [key: string]: string }): string[] | undefined {
         if (this.executable === "") { return undefined; }
-        return this._get_testrun_executable_args(this.executable + ' ' + this._testRunArgPattern, additionalEnv);
+        return this._get_testrun_executable_args(this.executable + ' ' + this._testRunArgPattern, this.testcaseSeparator, additionalEnv);
     }
     public get pythonExePath(): string {
         return this.covert_file_path(this._pythonExePath, "pythonExePath");
@@ -268,6 +282,10 @@ export class Config {
     public get exe_testrun_list_args(): string[] | undefined {
         if (this.exe_executable === "") { return undefined; }
         return this.convert(this.exe_executable + ' ' + this._exe_listTestArgPattern, {}).split(' ');
+    }
+    public get bin_testrun_list_args(): string[] | undefined {
+        if (this.bin_executable === "") { return undefined; }
+        return this.convert(this.bin_executable + ' ' + this._bin_listTestArgPattern, {}).split(' ');
     }
     public get testrun_list_args(): string[] | undefined {
         if (this.executable === "") { return undefined; }
@@ -279,6 +297,9 @@ export class Config {
     public get exe_resultFile(): string {
         return this.covert_file_path(this._exe_resultFile, "exe_resultFile");
     }
+    public get bin_resultFile(): string {
+        return this.covert_file_path(this._bin_resultFile, "bin_resultFile");
+    }
     public get resultSuccessRgex(): string {
         return this.covert_file_path(this._resultSuccessRgex, "resultSuccessRgex");
     }
@@ -288,6 +309,9 @@ export class Config {
             return this.cmakeLaunchTargetPath;
         }
         return this.covert_file_path(this._exe_executable, "exe_executable");
+    }
+    public get bin_executable(): string {
+        return this.covert_file_path(this._bin_executable, "bin_executable");
     }
 
     public async update_exe_executable(): Promise<void> {
@@ -396,7 +420,7 @@ export class Config {
         }
     }
 
-    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config|ExeConfig) => void, isActivateWorkspace:boolean = true) {
+    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config|ExeConfig|BinConfig) => void, isActivateWorkspace:boolean = true) {
         this.type = ConfigType.Config;
         this.workspaceFolder = workspaceFolder;
         this.controllerId = "cdoctest";
@@ -406,21 +430,30 @@ export class Config {
         this._listTestArgPattern = vscode.workspace.getConfiguration('cdoctest').get('listTestArgPattern') as string;
         this._exe_testRunArgPattern = vscode.workspace.getConfiguration('cdoctest').get('exe_testRunArgPattern') as string;
         this._exe_listTestArgPattern = vscode.workspace.getConfiguration('cdoctest').get('exe_listTestArgPattern') as string;
+        this._bin_testRunArgPattern = vscode.workspace.getConfiguration('cdoctest').get('bin_testRunArgPattern') as string;
+        this._bin_listTestArgPattern = vscode.workspace.getConfiguration('cdoctest').get('bin_listTestArgPattern') as string;
         this._resultFile = vscode.workspace.getConfiguration('cdoctest').get('resultFile') as string;
         this._exe_resultFile = vscode.workspace.getConfiguration('cdoctest').get('exe_resultFile') as string;
+        this._bin_resultFile = vscode.workspace.getConfiguration('cdoctest').get('bin_resultFile') as string;
         this._resultSuccessRgex = vscode.workspace.getConfiguration('cdoctest').get('resultSuccessRgex') as string;
 
         this._srcDirectory = vscode.workspace.getConfiguration('cdoctest').get('srcDirectory') as string;
         this._buildDirectory = vscode.workspace.getConfiguration('cdoctest').get('buildDirectory') as string;
         this._executable = vscode.workspace.getConfiguration('cdoctest').get('executable') as string;
         this._exe_executable = vscode.workspace.getConfiguration('cdoctest').get('exe_executable') as string;
+        this._bin_executable = vscode.workspace.getConfiguration('cdoctest').get('bin_executable') as string;
 
         this._testRunUseFile = vscode.workspace.getConfiguration('cdoctest').get('testRunUseFile') as boolean;
         this._listTestUseFile = vscode.workspace.getConfiguration('cdoctest').get('listTestUseFile') as boolean;
         this.exe_testRunUseFile = vscode.workspace.getConfiguration('cdoctest').get('exe_testRunUseFile') as boolean;
         this.exe_listTestUseFile = vscode.workspace.getConfiguration('cdoctest').get('exe_listTestUseFile') as boolean;
+        this.bin_testRunUseFile = vscode.workspace.getConfiguration('cdoctest').get('bin_testRunUseFile') as boolean;
+        this.bin_listTestUseFile = vscode.workspace.getConfiguration('cdoctest').get('bin_listTestUseFile') as boolean;
         this.libPaths = vscode.workspace.getConfiguration('cdoctest').get('libPaths') as string;
         this.configName = vscode.workspace.getConfiguration('cdoctest').get('configName') as string;
+        this.testcaseSeparator = vscode.workspace.getConfiguration('cdoctest').get('testcaseSeparator') as string;
+        this.exe_testcaseSeparator = vscode.workspace.getConfiguration('cdoctest').get('exe_testcaseSeparator') as string;
+        this.bin_testcaseSeparator = vscode.workspace.getConfiguration('cdoctest').get('bin_testcaseSeparator') as string;
 
         this.updateProject = this.updateProject.bind(this);
 
@@ -472,7 +505,7 @@ export class Config {
 
 // extend Config class to ExeConfig
 export class ExeConfig extends Config {
-    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config | ExeConfig) => void) {
+    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config | ExeConfig | BinConfig) => void) {
         super(context, workspaceFolder, activeWorkspace, false);
         this.type = ConfigType.ExeConfig;
         this.controllerId = "exe_test";
@@ -509,4 +542,44 @@ export class ExeConfig extends Config {
         return this.exe_testrun_list_args;
     }
 
+}
+
+// extend Config class to BinConfig
+export class BinConfig extends Config {
+    constructor(context: vscode.ExtensionContext, workspaceFolder: vscode.WorkspaceFolder, activeWorkspace: (config: Config | ExeConfig | BinConfig) => void) {
+        super(context, workspaceFolder, activeWorkspace, false);
+        this.type = ConfigType.BinConfig;
+        this.controllerId = "bin_test";
+        this.activateWorkspaceBaseOnCmakeSetting();
+    }
+    public get testRunUseFile(): boolean {
+        return this.bin_testRunUseFile;
+    }
+    public get listTestUseFile(): boolean {
+        return this.bin_listTestUseFile;
+    }
+    public get testRunArgPattern(): string {
+        return this._bin_testRunArgPattern;
+    }
+    public get listTestArgPattern(): string {
+        return this._bin_listTestArgPattern;
+    }
+    public get resultFile(): string {
+        return this._bin_resultFile;
+    }
+    public get executable(): string {
+        return this._bin_executable;
+    }
+    public get srcDirectory(): string {
+        return this._srcDirectory;
+    }
+    public get buildDirectory(): string {
+        if (this.useCmakeTarget) {
+            return this.covert_file_path(this.cmakeBuildDirectory, "buildDirectory");
+        }
+        return this.covert_file_path(this._buildDirectory, "buildDirectory");
+    }
+    public get testrun_list_args(): string[] | undefined {
+        return this.bin_testrun_list_args;
+    }
 }

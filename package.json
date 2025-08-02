@@ -147,6 +147,51 @@
           "description": "Dynamic library paths separated by ';'",
           "type": "string",
           "default": ""
+        },
+        "cdoctest.testcaseSeparator": {
+          "description": "Separator between test suite and test case names",
+          "type": "string",
+          "default": "::"
+        },
+        "cdoctest.exe_testcaseSeparator": {
+          "description": "Separator between test suite and test case names for executable tests",
+          "type": "string",
+          "default": "::"
+        },
+        "cdoctest.bin_testRunArgPattern": {
+          "description": "Test run argument pattern for binary",
+          "type": "string",
+          "default": "TC/${test_suite_name}::${test_case_name} output.vsc"
+        },
+        "cdoctest.bin_listTestArgPattern": {
+          "description": "List test argument pattern for binary",
+          "type": "string",
+          "default": "GetTcList:"
+        },
+        "cdoctest.bin_resultFile": {
+          "description": "Result file for binary",
+          "type": "string",
+          "default": "${buildDirectory}/output.vsc"
+        },
+        "cdoctest.bin_executable": {
+          "description": "Executable for binary",
+          "type": "string",
+          "default": ""
+        },
+        "cdoctest.bin_testRunUseFile": {
+          "description": "Use file to run tests for binary",
+          "type": "boolean",
+          "default": true
+        },
+        "cdoctest.bin_listTestUseFile": {
+          "description": "Use file to list tests for binary",
+          "type": "boolean",
+          "default": false
+        },
+        "cdoctest.bin_testcaseSeparator": {
+          "description": "Separator between test suite and test case names for binary tests",
+          "type": "string",
+          "default": "::"
         }
       }
     }
