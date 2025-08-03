@@ -32,7 +32,7 @@ export const test = base.extend<ExtensionFixtures>({
     
     // Create a simple CMakeLists.txt
     fs.writeFileSync(path.join(tempDir, 'CMakeLists.txt'), `
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 project(TestProject)
 
 set(CMAKE_CXX_STANDARD 17)

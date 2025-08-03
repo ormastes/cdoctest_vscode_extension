@@ -143,7 +143,7 @@ export async function launchDebugSessionWithCloseHandler(
         reject('Empty  program.');
         return;
     }
-    let  exe_program = vscode.Uri.file(program + '.exe')
+    let  exe_program = vscode.Uri.file(program + '.exe');
     if  (await fileExists(exe_program)) {
         program = exe_program.fsPath;
     } else if ( await fileExists(vscode.Uri.file(program)) === false) {
