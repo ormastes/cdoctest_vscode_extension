@@ -138,7 +138,15 @@ export async function launchDebugSessionWithCloseHandler(
     isDebug: boolean
 ): Promise<void> {
     // check program file exists
-    if (!program || await fileExists(vscode.Uri.file(program)) === false) {
+
+    if (!program ) {
+        reject('Empty  program.');
+        return;
+    }
+    let  exe_program = vscode.Uri.file(program + '.exe')
+    if  (await fileExists(exe_program)) {
+        program = exe_program.fsPath;
+    } else if ( await fileExists(vscode.Uri.file(program)) === false) {
         reject('Program file does not exist.');
         return;
     }
@@ -163,7 +171,7 @@ export async function launchDebugSessionWithCloseHandler(
     async function handlClose(sessionName: string, sessionId:string, exitCode?: number): Promise<void> {
         // Filter based on the session name (or you could use session.id if preferred).
         if (sessionName === debugConfig.name) {
-            console.log(`Debug session "${sessionName}" has terminated with exit code (if available)`);
+            console.log(`Debug session "${sessionName}" has terminated${exitCode !== undefined ? ` with exit code ${exitCode}` : ''}`);
             // Perform any cleanup or further actions here.
             if (isUseFile) {
                 if (! await fileExists(vscode.Uri.file(resultFile))) {

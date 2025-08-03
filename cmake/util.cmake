@@ -160,7 +160,7 @@ if(\"${FRAMEWORK}\" STREQUAL \"unittest-cpp\")
       file(APPEND \"\${_ctest_file}\" \"  WORKING_DIRECTORY \\\"\${CMAKE_CURRENT_BINARY_DIR}\\\"\\n\")
       file(APPEND \"\${_ctest_file}\" \"  TEST_FILE \\\"\${_abs_filename}\\\"\\n\")
       file(APPEND \"\${_ctest_file}\" \"  TEST_LINE \\\"\${_line_number}\\\"\\n\")
-      file(APPEND \"\${_ctest_file}\" \"  TEST_FULL_NAME \\\"\${_full_test_name}\\\"\\n\")
+      file(APPEND \"\${_ctest_file}\" \"  TEST_FULL_NAME \\\"\${_display_name}\\\"\\n\")
       file(APPEND \"\${_ctest_file}\" \"  TEST_FRAMEWORK \\\"unittestpp\\\"\\n\")
       file(APPEND \"\${_ctest_file}\" \")\\n\")
       math(EXPR _test_count \"\${_test_count} + 1\")
@@ -238,7 +238,7 @@ elseif(\"${FRAMEWORK}\" STREQUAL \"gtest\")
     file(APPEND \"\${_ctest_file}\" \"  WORKING_DIRECTORY \\\"\${CMAKE_CURRENT_BINARY_DIR}\\\"\\n\")
     file(APPEND \"\${_ctest_file}\" \"  TEST_FILE \\\"\${_test_file}\\\"\\n\")
     file(APPEND \"\${_ctest_file}\" \"  TEST_LINE \\\"\${_test_line}\\\"\\n\")
-    file(APPEND \"\${_ctest_file}\" \"  TEST_FULL_NAME \\\"\${_display_name}\\\"\\n\")
+    file(APPEND \"\${_ctest_file}\" \"  TEST_FULL_NAME \\\"\${_full_test_name}\\\"\\n\")
     file(APPEND \"\${_ctest_file}\" \"  TEST_FRAMEWORK \\\"gtest\\\"\\n\")
     file(APPEND \"\${_ctest_file}\" \")\\n\")
     math(EXPR _test_count \"\${_test_count} + 1\")
@@ -271,7 +271,7 @@ elseif(\"${FRAMEWORK}\" STREQUAL \"catch2\")
   
   # Parse Catch2 XML format: <TestCase name=\"TestName\" filename=\"path\" line=\"123\">
   string(REGEX MATCHALL
-    \"<TestCase[^>]+name=\\\"([^\\\"]+)\\\"[^>]*>\"
+    \"<TestCase[^>]+>\"
     _entries
     \"\${_xml_content}\"
   )
@@ -279,11 +279,15 @@ elseif(\"${FRAMEWORK}\" STREQUAL \"catch2\")
   set(_test_count 0)
   foreach(_entry IN LISTS _entries)
     # Extract test name
-    string(REGEX REPLACE
-      \".*name=\\\"([^\\\"]+)\\\".*\"
-      \"\\\\1\"
-      _test_name \"\${_entry}\"
-    )
+    set(_test_name \"\")
+    if(_entry MATCHES \"name=\\\"([^\\\"]+)\\\"\")
+      set(_test_name \"\${CMAKE_MATCH_1}\")
+    endif()
+    
+    # Skip if no test name found
+    if(_test_name STREQUAL \"\")
+      continue()
+    endif()
     
     # Try to extract file and line from the XML entry
     set(_test_file \"\${CMAKE_CURRENT_SOURCE_DIR}/test_main.cpp\")
@@ -303,13 +307,17 @@ elseif(\"${FRAMEWORK}\" STREQUAL \"catch2\")
       set(_test_line \"\${CMAKE_MATCH_1}\")
     endif()
     
+    # For Catch2, we need to properly escape the test name for the command line
+    # Replace dots with :: for display name (like gtest)
+    string(REPLACE \".\" \"::\" _display_name \"\${_test_name}\")
+    
     # Write to CTest file
-    file(APPEND \"\${_ctest_file}\" \"add_test(\\\"\${_test_name}\\\" \\\"\${CMAKE_CURRENT_BINARY_DIR}/\${TEST_TARGET}\${CMAKE_EXECUTABLE_SUFFIX}\\\" \\\"\${_test_name}\\\")\\n\")
-    file(APPEND \"\${_ctest_file}\" \"set_tests_properties(\\\"\${_test_name}\\\" PROPERTIES\\n\")
+    file(APPEND \"\${_ctest_file}\" \"add_test(\\\"\${_display_name}\\\" \\\"\${CMAKE_CURRENT_BINARY_DIR}/\${TEST_TARGET}\${CMAKE_EXECUTABLE_SUFFIX}\\\" \\\"\${_test_name}\\\")\\n\")
+    file(APPEND \"\${_ctest_file}\" \"set_tests_properties(\\\"\${_display_name}\\\" PROPERTIES\\n\")
     file(APPEND \"\${_ctest_file}\" \"  WORKING_DIRECTORY \\\"\${CMAKE_CURRENT_BINARY_DIR}\\\"\\n\")
     file(APPEND \"\${_ctest_file}\" \"  TEST_FILE \\\"\${_test_file}\\\"\\n\")
     file(APPEND \"\${_ctest_file}\" \"  TEST_LINE \\\"\${_test_line}\\\"\\n\")
-    file(APPEND \"\${_ctest_file}\" \"  TEST_FULL_NAME \\\"\${_test_name}\\\"\\n\")
+    file(APPEND \"\${_ctest_file}\" \"  TEST_FULL_NAME \\\"\${_display_name}\\\"\\n\")
     file(APPEND \"\${_ctest_file}\" \"  TEST_FRAMEWORK \\\"catch2\\\"\\n\")
     file(APPEND \"\${_ctest_file}\" \")\\n\")
     math(EXPR _test_count \"\${_test_count} + 1\")

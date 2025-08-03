@@ -212,8 +212,6 @@ export class Config {
     public testcaseSeparator: string;
     public exe_testcaseSeparator: string;
     public bin_testcaseSeparator: string;
-    public useCTestDiscovery: boolean;
-    public ctestUseExitCode: boolean;
 
     private _disposables: vscode.Disposable[] = [];
 
@@ -480,8 +478,7 @@ export class Config {
         this.testcaseSeparator = vscode.workspace.getConfiguration('cdoctest').get('testcaseSeparator') as string;
         this.exe_testcaseSeparator = vscode.workspace.getConfiguration('cdoctest').get('exe_testcaseSeparator') as string;
         this.bin_testcaseSeparator = vscode.workspace.getConfiguration('cdoctest').get('bin_testcaseSeparator') as string;
-        this.useCTestDiscovery = vscode.workspace.getConfiguration('cdoctest').get('useCTestDiscovery') as boolean;
-        this.ctestUseExitCode = vscode.workspace.getConfiguration('cdoctest').get('ctestUseExitCode') as boolean;
+
 
         this.updateProject = this.updateProject.bind(this);
 

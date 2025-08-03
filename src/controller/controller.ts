@@ -88,12 +88,12 @@ async function _startTestRun(curCtrl: vscode.TestController, request: vscode.Tes
 			let resultFile: string = config.exe_resultFile;
 			let useExitCodeHandler = false;
 			
-			if (ctestData && config.useCTestDiscovery && config.useCmakeTarget) {
+			if (ctestData && config.useCmakeTarget) {
 				// Use CTest data for execution
 				executableArgs = [ctestData.executable, ...ctestData.args];
 				workingDir = ctestData.workingDirectory || config.buildDirectory;
 				// When using CTest, we can rely on exit codes if configured
-				useExitCodeHandler = config.ctestUseExitCode;
+				useExitCodeHandler = true;
 				
 				// Adjust result file based on test framework if needed
 				if (ctestData.testFramework) {
