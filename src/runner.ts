@@ -5,6 +5,8 @@ import * as readline from 'readline';
 import { spawn, ChildProcess, SpawnOptions } from 'child_process';
 import * as os from 'os';
 import { fileExists } from './util';
+import * as fs from 'fs';
+import * as path from 'path';
 
 let stdoutLines: { [key: string]: string[] } = {};
 
@@ -147,7 +149,15 @@ export async function launchDebugSessionWithCloseHandler(
     let debugConfig: vscode.DebugConfiguration = (baseConfig)? { ...baseConfig } : { type: '', name: '', request: '' };
 
     if (debugConfig.type === undefined || debugConfig.type === '') {
-        debugConfig.type = 'lldb-dap';
+        // Auto-detect debugger based on platform
+        if (process.platform === 'win32') {
+            // Check if Visual Studio debugger is available
+            debugConfig.type = 'cppvsdbg';  // Visual Studio debugger
+        } else if (process.platform === 'linux') {
+            debugConfig.type = 'cppdbg';  // GDB debugger
+        } else {
+            debugConfig.type = 'lldb-dap';  // LLDB for macOS and fallback
+        }
     }
     if (debugConfig.name === undefined || debugConfig.name === '') {
         debugConfig.name = 'Debug Program';
@@ -199,7 +209,7 @@ export async function launchDebugSessionWithCloseHandler(
     const result = vscode.debug.onDidStartDebugSession(async (session) => {
         // Only handle sessions that match our configuration
         if (session.configuration.name !== debugConfig.name || 
-            (debugConfig.type === 'lldb-dap' && session.type !== 'lldb-dap')) {
+            session.type !== debugConfig.type) {
             return;
         }
         initStdout(session.id);
@@ -237,6 +247,7 @@ export async function launchDebugSessionWithCloseHandler(
                 vscode.window.showErrorMessage('Failed to start debugging session.');
             }
         } catch (error) {
+            console.warn('Error starting debugging session:', error);
             reject(error);
         }
     }

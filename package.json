@@ -2,7 +2,7 @@
   "name": "cdoctest",
   "displayName": "cdoctest",
   "description": "Run cdocttest and executable tc runner.",
-  "version": "0.0.2",
+  "version": "0.5.0",
   "publisher": "ormastes",
   "repository": "https://github.com/ormastes/cdoctest_vscode_extension",
   "engines": {
@@ -58,6 +58,26 @@
           "description": "Name of the configuration",
           "type": "string",
           "default": "cdoctest"
+        },
+        "cdoctest.enableCdoctestConfig": {
+          "description": "Enable cdoctest test configuration",
+          "type": "boolean",
+          "default": true
+        },
+        "cdoctest.enableExeConfig": {
+          "description": "Enable executable test configuration",
+          "type": "boolean",
+          "default": true
+        },
+        "cdoctest.enableBinConfig": {
+          "description": "Enable binary test configuration",
+          "type": "boolean",
+          "default": true
+        },
+        "cdoctest.enableCmakeConfig": {
+          "description": "Enable CMake test configuration",
+          "type": "boolean",
+          "default": true
         },
         "cdoctest.useCmakeTarget": {
           "description": "Use cmake target to run tests",

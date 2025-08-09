@@ -1,0 +1,13 @@
+{
+    // Test different configuration enable/disable settings
+    "cdoctest.enableCdoctestConfig": false,
+    "cdoctest.enableExeConfig": true,
+    "cdoctest.enableBinConfig": false,
+    "cdoctest.enableCmakeConfig": false,
+    
+    // Test executable configuration
+    "cdoctest.exe_testRunArgPattern": "${test_full_name}",
+    "cdoctest.exe_listTestArgPattern": "--list",
+    "cdoctest.exe_resultFile": "test_results.txt",
+    "cdoctest.resultSuccessRgex": "All tests passed!"
+}

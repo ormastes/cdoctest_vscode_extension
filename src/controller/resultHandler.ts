@@ -196,7 +196,7 @@ export async function getCTestDiscoveryHandler(ctrl: vscode.TestController, conf
                 if (test.testFramework) {
                     testItem.tags = [new vscode.TestTag(test.testFramework)];
                 }
-                
+
                 fixtureItem.children.add(testItem);
             }
         }
