@@ -7,19 +7,34 @@ test.describe('Simple VS Code Launch Test', () => {
   test('should open and close VS Code successfully', async () => {
     console.log('Starting VS Code launch test...');
     
-    // Helper to count VS Code processes
+    // Helper functions for process management
     const { exec } = require('child_process');
     const { promisify } = require('util');
     const execAsync = promisify(exec);
     
-    async function countVSCodeProcesses(): Promise<number> {
-      const { stdout } = await execAsync('tasklist /FI "IMAGENAME eq Code.exe" 2>nul');
-      return stdout.split('\n').filter(line => line.includes('Code.exe')).length;
+    async function getVSCodePIDs(): Promise<number[]> {
+      const { stdout } = await execAsync('tasklist /FI "IMAGENAME eq Code.exe" /FO CSV 2>nul');
+      const lines = stdout.split('\n').slice(1); // Skip header
+      const pids: number[] = [];
+      
+      for (const line of lines) {
+        if (line.includes('Code.exe')) {
+          // Parse CSV format: "Image Name","PID","Session Name","Session#","Mem Usage"
+          const parts = line.split(',');
+          if (parts.length >= 2) {
+            const pid = parseInt(parts[1].replace(/"/g, '').trim());
+            if (!isNaN(pid)) {
+              pids.push(pid);
+            }
+          }
+        }
+      }
+      return pids;
     }
     
-    // Check initial VS Code processes
-    const initialProcessCount = await countVSCodeProcesses();
-    console.log(`Initial VS Code processes: ${initialProcessCount}`);
+    // Get initial VS Code PIDs
+    const initialPIDs = await getVSCodePIDs();
+    console.log(`Initial VS Code PIDs (${initialPIDs.length}):`, initialPIDs);
     
     // Find VS Code executable
     const vscodePath = 'C:\\Users\\ormas\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe';
@@ -31,8 +46,7 @@ test.describe('Simple VS Code Launch Test', () => {
     console.log(`Found VS Code at: ${vscodePath}`);
     
     let electronApp: ElectronApplication | null = null;
-    let trackedPid: number | null = null;
-    let afterLaunchCount = initialProcessCount;
+    let newPIDs: number[] = [];
     
     try {
       // Launch VS Code with minimal settings
@@ -55,29 +69,25 @@ test.describe('Simple VS Code Launch Test', () => {
         timeout: 30000
       });
       
-      // Track the process if we can get its PID
-      try {
-        const electronProcess = (electronApp as any).process();
-        if (electronProcess && electronProcess.pid) {
-          trackedPid = electronProcess.pid;
-          VSCodeManager.registerProcess(trackedPid);
-          console.log(`VS Code launched with PID: ${trackedPid}`);
-        }
-      } catch (e) {
-        console.log('Could not get process PID:', e);
-      }
-
       // Just verify the app launched successfully
       expect(electronApp).toBeTruthy();
       console.log('VS Code process launched successfully');
       
-      // Give VS Code time to fully initialize
+      // Give VS Code time to fully initialize and spawn all child processes
       await new Promise(resolve => setTimeout(resolve, 3000));
       
-      // Check VS Code processes after launch
-      afterLaunchCount = await countVSCodeProcesses();
-      console.log(`After launch VS Code processes: ${afterLaunchCount}`);
-      console.log(`New processes created: ${afterLaunchCount - initialProcessCount}`);
+      // Get all VS Code PIDs after launch
+      const afterLaunchPIDs = await getVSCodePIDs();
+      console.log(`After launch VS Code PIDs (${afterLaunchPIDs.length}):`, afterLaunchPIDs);
+      
+      // Identify new PIDs that were created
+      newPIDs = afterLaunchPIDs.filter(pid => !initialPIDs.includes(pid));
+      console.log(`New VS Code PIDs created (${newPIDs.length}):`, newPIDs);
+      
+      // Register all new PIDs with VSCodeManager
+      for (const pid of newPIDs) {
+        VSCodeManager.registerProcess(pid);
+      }
       
       // Don't try to detect windows - just verify the process is running
       console.log('VS Code is running');
@@ -89,39 +99,56 @@ test.describe('Simple VS Code Launch Test', () => {
       throw error;
     } finally {
       // Clean up - always close VS Code
-      if (electronApp) {
+      if (electronApp || newPIDs.length > 0) {
         console.log('Closing VS Code...');
         
         // Try to close using Playwright's method first
-        try {
-          await electronApp.close();
-          console.log('Closed VS Code using Playwright');
-        } catch (e) {
-          console.log('Failed to close with Playwright:', e);
+        let closedWithPlaywright = false;
+        if (electronApp) {
+          try {
+            await electronApp.close();
+            console.log('Closed VS Code using Playwright');
+            closedWithPlaywright = true;
+          } catch (e) {
+            console.log('Failed to close with Playwright:', e);
+          }
+        }
+        
+        // Wait a bit to see if Playwright close worked
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Check which PIDs are still running
+        const remainingPIDs = await getVSCodePIDs();
+        const pidsToKill = newPIDs.filter(pid => remainingPIDs.includes(pid));
+        
+        if (pidsToKill.length > 0) {
+          console.log(`Found ${pidsToKill.length} VS Code processes still running, force killing:`, pidsToKill);
           
-          // Fallback: Use VSCodeManager to kill the tracked process
-          if (trackedPid) {
-            console.log(`Killing VS Code process ${trackedPid} with force...`);
-            // Use force kill with tree flag to kill all child processes
-            const { exec } = require('child_process');
-            const { promisify } = require('util');
-            const execAsync = promisify(exec);
+          // Force kill each remaining PID
+          for (const pid of pidsToKill) {
             try {
-              await execAsync(`taskkill /PID ${trackedPid} /T /F`);
-              console.log(`Force killed VS Code process tree for PID ${trackedPid}`);
+              await execAsync(`taskkill /PID ${pid} /T /F`);
+              console.log(`Force killed VS Code process tree for PID ${pid}`);
             } catch (killErr) {
-              console.log(`Failed to force kill: ${killErr}`);
+              console.log(`Failed to kill PID ${pid}:`, killErr);
             }
           }
         }
         
-        // Wait to ensure process is terminated
+        // Wait to ensure processes are terminated
         await new Promise(resolve => setTimeout(resolve, 2000));
         
         // Check VS Code processes after closing
-        const finalProcessCount = await countVSCodeProcesses();
-        console.log(`Final VS Code processes: ${finalProcessCount}`);
-        console.log(`Processes closed: ${afterLaunchCount - finalProcessCount}`);
+        const finalPIDs = await getVSCodePIDs();
+        console.log(`Final VS Code PIDs (${finalPIDs.length}):`, finalPIDs);
+        
+        // Check if we successfully closed all new processes
+        const remainingNewPIDs = newPIDs.filter(pid => finalPIDs.includes(pid));
+        if (remainingNewPIDs.length > 0) {
+          console.warn(`Warning: ${remainingNewPIDs.length} new VS Code processes still running:`, remainingNewPIDs);
+        } else {
+          console.log('All new VS Code processes successfully closed');
+        }
         
         console.log('VS Code closed');
       }

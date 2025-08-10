@@ -24,3 +24,4 @@ test/e2e/*.js.map
 test/e2e/**/*.js
 test/e2e/**/*.js.map
 test/e2e/output.vsc
+test/e2e/test-workspace/build/
