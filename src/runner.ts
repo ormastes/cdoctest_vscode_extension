@@ -244,7 +244,7 @@ export async function launchDebugSessionWithCloseHandler(
         try {
             const started = await vscode.debug.startDebugging(undefined, debugConfig);
             if (!started) {
-                vscode.window.showErrorMessage('Failed to start debugging session.');
+                vscode.window.showErrorMessage('Failed to start debugging session.', 'OK');
             }
         } catch (error) {
             console.warn('Error starting debugging session:', error);

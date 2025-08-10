@@ -11,3 +11,16 @@ out/
 dist/
 coverage/
 **/build/*
+**/*.vsix
+
+# E2E test temporary files
+test/e2e/temp-vscode-profile/
+test/e2e/temp-vscode-extensions/
+test/e2e/playwright-report/
+test/e2e/test-results/
+test-results/
+test/e2e/*.js
+test/e2e/*.js.map
+test/e2e/**/*.js
+test/e2e/**/*.js.map
+test/e2e/output.vsc

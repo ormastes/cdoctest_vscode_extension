@@ -1,9 +1,0 @@
-{
-    "cdoctest.useCmakeTarget": false,
-	"cdoctest.pythonExePath": "C:/Python313/python.exe",
-	"cdoctest.srcDirectory": "${workspaceFolder}",
-	"cdoctest.buildDirectory": "${workspaceFolder}/build/Debug",
-	"cdoctest.exe_resultFile": "${buildDirectory}/output.vsc",
-	//"cdoctest.executable": "${workspaceFolder}/build/Debug/hello_test.exe",
-	"cdoctest.exe_executable": "${workspaceFolder}/build/Debug/hello_test.exe",
-}

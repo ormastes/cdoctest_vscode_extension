@@ -55,7 +55,7 @@ interface CMakeKit {
       kits = JSON.parse(fileData) as CMakeKit[];
     } catch (error: any) {
       if (error.code !== 'ENOENT') {
-        vscode.window.showErrorMessage(`Error reading kits file: ${error.message}`);
+        vscode.window.showErrorMessage(`Error reading kits file: ${error.message}`, 'OK');
         throw error;
       }
       // File doesn't exist, start with empty array.
@@ -67,7 +67,7 @@ interface CMakeKit {
       kit => kit.compilers?.C === clangPath && kit.compilers?.CXX === clangPPPath
     );
     if (duplicate) {
-      vscode.window.showInformationMessage(`A kit for "${binDir}" is already added.`);
+      vscode.window.showInformationMessage(`A kit for "${binDir}" is already added.`, 'OK');
       return;
     }
   
@@ -75,15 +75,15 @@ interface CMakeKit {
     const jsonStr = JSON.stringify(kits, null, 2);
     try {
       await fs.promises.writeFile(kitsFilePath, jsonStr, { encoding: 'utf8' });
-      vscode.window.showInformationMessage(`New kit added: "${newKit.name}".`);
-      vscode.window.showWarningMessage(`Remember to select the new kit in CMake Tools if you wish to use it.`);
+      vscode.window.showInformationMessage(`New kit added: "${newKit.name}".`, 'OK');
+      vscode.window.showWarningMessage(`Remember to select the new kit in CMake Tools if you wish to use it.`, 'OK');
     } catch (error: any) {
-      vscode.window.showErrorMessage(`Failed to update kits file: ${error.message}`);
+      vscode.window.showErrorMessage(`Failed to update kits file: ${error.message}`, 'OK');
     }
   }
 export async function addNewToolchain(binDir: string): Promise<void> {
     if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
-      vscode.window.showInformationMessage('No workspace open. Waiting for a workspace folder to be added...');
+      vscode.window.showInformationMessage('No workspace open. Waiting for a workspace folder to be added...', 'OK');
       // Listen for changes to workspace folders.
       const disposable = vscode.workspace.onDidChangeWorkspaceFolders(async (e) => {
         if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {

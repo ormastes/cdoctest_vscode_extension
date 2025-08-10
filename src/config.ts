@@ -388,7 +388,7 @@ export class Config {
         } else {
             getCMakeToolsApi(Version.v2, /*exactMatch*/ false).then(cmakeApi => {
                 if (!cmakeApi) {
-                    vscode.window.showErrorMessage('CMake Tools API is unavailable. Please install CMake Tools.');
+                    vscode.window.showErrorMessage('CMake Tools API is unavailable. Please install CMake Tools.', 'OK');
                     return;
                 }
                 this.cmakeApi = cmakeApi;
