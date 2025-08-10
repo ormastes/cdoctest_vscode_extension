@@ -1,4 +1,4 @@
-import { ElectronApplication, _electron as electron } from '@playwright/test';
+import { ElectronApplication, _electron as electron, Page } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
 import { exec } from 'child_process';
@@ -44,7 +44,8 @@ export class VSCodeTestHelper {
       workspacePath: config.workspacePath || path.join(__dirname, '..', 'test-workspace'),
       buildPath: config.buildPath || path.join(config.workspacePath || path.join(__dirname, '..', 'test-workspace'), 'build'),
       userDataDir: config.userDataDir || path.join(__dirname, '..', 'temp-vscode-profile'),
-      extensionsDir: config.extensionsDir || path.join(__dirname, '..', 'temp-vscode-extensions'),
+      // Only set extensionsDir if explicitly provided
+      extensionsDir: config.extensionsDir,
       additionalArgs: config.additionalArgs || [],
       initTimeout: config.initTimeout || 5000,
       cleanupBuildDir: config.cleanupBuildDir !== false
@@ -124,9 +125,13 @@ export class VSCodeTestHelper {
       '--disable-updates',
       '--disable-crash-reporter',
       `--user-data-dir=${this.config.userDataDir}`,
-      `--extensions-dir=${this.config.extensionsDir}`,
       ...this.config.additionalArgs!
     ];
+    
+    // Only add extensions-dir if explicitly provided
+    if (this.config.extensionsDir) {
+      args.push(`--extensions-dir=${this.config.extensionsDir}`);
+    }
     
     // Add workspace path if provided
     if (this.config.workspacePath) {
@@ -398,16 +403,144 @@ export class VSCodeTestHelper {
    * Verify build artifacts exist
    */
   verifyBuildArtifacts(buildDir: string): TestResult {
-    const files = fs.readdirSync(buildDir);
-    const hasArtifacts = files.some(f => 
-      f.endsWith('.exe') || f.endsWith('.a') || f.endsWith('.lib') || 
-      f.endsWith('.o') || f.endsWith('.obj')
-    );
+    // Check main directory and common subdirectories
+    const dirsToCheck = [buildDir];
+    const subdirs = ['bin', 'lib', 'Debug', 'Release', 'MinSizeRel', 'RelWithDebInfo'];
+    
+    for (const subdir of subdirs) {
+      const fullPath = path.join(buildDir, subdir);
+      if (fs.existsSync(fullPath)) {
+        dirsToCheck.push(fullPath);
+      }
+    }
+    
+    let allFiles: string[] = [];
+    let hasArtifacts = false;
+    
+    for (const dir of dirsToCheck) {
+      try {
+        const files = fs.readdirSync(dir);
+        allFiles = allFiles.concat(files.map(f => path.relative(buildDir, path.join(dir, f))));
+        
+        if (files.some(f => 
+          f.endsWith('.exe') || f.endsWith('.a') || f.endsWith('.lib') || 
+          f.endsWith('.o') || f.endsWith('.obj') || f.endsWith('.dll')
+        )) {
+          hasArtifacts = true;
+        }
+      } catch (e) {
+        // Directory might not exist
+      }
+    }
     
     return {
       success: hasArtifacts,
-      data: { files, hasArtifacts }
+      data: { files: allFiles, hasArtifacts, dirsChecked: dirsToCheck }
     };
+  }
+
+  /**
+   * Get the main VS Code window/page
+   */
+  async getMainWindow(): Promise<Page | null> {
+    if (!this.electronApp) {
+      console.log('No Electron app instance');
+      return null;
+    }
+    
+    try {
+      // Get the first window (main window)
+      const windows = await this.electronApp.windows();
+      if (windows.length > 0) {
+        console.log(`Found ${windows.length} VS Code window(s)`);
+        return windows[0];
+      }
+      console.log('No VS Code windows found');
+      return null;
+    } catch (error: any) {
+      console.error('Failed to get VS Code window:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Wait for element and click it
+   */
+  async clickElement(page: Page, selector: string, timeout: number = 10000): Promise<boolean> {
+    try {
+      await page.waitForSelector(selector, { timeout });
+      await page.click(selector);
+      console.log(`Clicked element: ${selector}`);
+      return true;
+    } catch (error) {
+      console.error(`Failed to click element ${selector}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if element exists
+   */
+  async elementExists(page: Page, selector: string, timeout: number = 5000): Promise<boolean> {
+    try {
+      await page.waitForSelector(selector, { timeout });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get text content from element
+   */
+  async getElementText(page: Page, selector: string): Promise<string | null> {
+    try {
+      const element = await page.$(selector);
+      if (element) {
+        return await element.textContent();
+      }
+      return null;
+    } catch (error) {
+      console.error(`Failed to get text from ${selector}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get all matching elements' text
+   */
+  async getAllElementsText(page: Page, selector: string): Promise<string[]> {
+    try {
+      const elements = await page.$$(selector);
+      const texts: string[] = [];
+      for (const element of elements) {
+        const text = await element.textContent();
+        if (text) {
+          texts.push(text.trim());
+        }
+      }
+      return texts;
+    } catch (error) {
+      console.error(`Failed to get texts from ${selector}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Take a screenshot for debugging
+   */
+  async takeScreenshot(page: Page, name: string): Promise<void> {
+    try {
+      const screenshotPath = path.join(__dirname, '..', 'screenshots', `${name}.png`);
+      const dir = path.dirname(screenshotPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      await page.screenshot({ path: screenshotPath });
+      console.log(`Screenshot saved: ${screenshotPath}`);
+    } catch (error) {
+      console.error('Failed to take screenshot:', error);
+    }
   }
 
   /**

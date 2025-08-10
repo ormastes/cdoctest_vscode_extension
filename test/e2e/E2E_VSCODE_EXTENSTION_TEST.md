@@ -4,6 +4,14 @@
 
 We use **Playwright** for comprehensive end-to-end testing of our VS Code extension. Our test suite includes both build verification tests and VS Code UI automation tests to ensure the extension works correctly with CMake/CTest projects.
 
+## Latest Updates (August 2025)
+
+### Key Improvements
+- **Test Panel Selection**: Use `[aria-label="Testing"]` selector for reliable test panel opening
+- **Root Node Expansion**: Use `.monaco-tl-twistie` selector to expand test tree nodes
+- **Extension Dependencies**: Don't use `--disable-extensions` flag as it prevents CMake Tools from loading
+- **Single VSCode Instance**: Ensure only one VSCode instance runs during tests to avoid conflicts
+
 ## Key Features
 
 1. **Build and Discovery Tests**: Verify CMake build process and test discovery
@@ -43,32 +51,48 @@ test/
 
 ## Test Implementation
 
-### Extension Loading Test (extension-load.spec.ts)
+### Current Test Files
+
+1. **extension-test-panel.spec.ts** - Main test for CMake rebuild with CTest
+2. **cmake-clean-test.spec.ts** - Tests CMake clean operation
+3. **cmake-rebuild-ctest.spec.ts** - Tests CMake rebuild and CTest verification
+4. **simple-vscode-open.spec.ts** - Basic VSCode opening test
+
+### Opening Test Panel (Improved Method)
 
 ```typescript
-import { expect, test } from '@mshanemc/vscode-test-playwright';
+// Most reliable way to open the test panel
+console.log('Opening Testing panel...');
+const testPanelOpened = await helper.clickElement(mainWindow, '[aria-label="Testing"]', 3000);
 
-test('CDocTest extension loads successfully', async ({ workbox, evaluateInVSCode }) => {
-  // Verify extension is loaded and active
-  const extensions = await evaluateInVSCode(async (vscode) => {
-    return vscode.extensions.all.map(ext => ({
-      id: ext.id,
-      isActive: ext.isActive
-    }));
-  });
+if (!testPanelOpened) {
+  // Fallback: Try command palette
+  console.log('Opening Testing panel via command palette...');
+  await mainWindow.keyboard.press('Control+Shift+P');
+  await mainWindow.waitForTimeout(1000);
+  await mainWindow.keyboard.type('View: Show Testing');
+  await mainWindow.waitForTimeout(1000);
+  await mainWindow.keyboard.press('Enter');
+}
+```
+
+### Expanding Test Tree Nodes
+
+```typescript
+// Find and expand root test node
+const rootNode = await mainWindow.locator('.monaco-list-row:has-text("calculator_test")').first();
+if (rootNode) {
+  await rootNode.click();
+  await mainWindow.waitForTimeout(1000);
   
-  const cdoctestExt = extensions.find(ext => 
-    ext.id.includes('cdoctest')
-  );
-  
-  expect(cdoctestExt).toBeDefined();
-  expect(cdoctestExt?.isActive).toBe(true);
-  
-  // Verify Testing sidebar is available
-  const activityBar = workbox.locator('.activitybar');
-  const testingIcon = activityBar.locator('[aria-label*="Testing"]');
-  await expect(testingIcon).toBeVisible();
-});
+  // Click the expand arrow (twistie)
+  const expandArrow = await mainWindow.locator('.monaco-tl-twistie').first();
+  if (await expandArrow.isVisible()) {
+    await expandArrow.click();
+    console.log('Clicked expand arrow to show test list');
+    await mainWindow.waitForTimeout(2000);
+  }
+}
 ```
 
 ### CTest Discovery Test (ctest-discovery.spec.ts)
@@ -167,33 +191,43 @@ test('CDocTest runs selected test and shows results', async ({ workbox, evaluate
 
 ## Best Practices
 
-1. **Isolation**: Test with minimal extensions to avoid conflicts
-2. **Wait Strategies**: Use Playwright's built-in wait mechanisms and timeouts
-3. **Dual Testing**: Combine UI assertions with VS Code API calls
+1. **Extension Dependencies**: Allow VSCode to load necessary extensions (especially CMake Tools)
+   - Don't use `--disable-extensions` flag
+   - Install required extensions with `--install-extension=ms-vscode.cmake-tools`
+2. **Wait Strategies**: Use appropriate timeouts for VSCode operations
+   - Panel opening: 3000ms
+   - Test discovery: 5000ms
+   - Tree expansion: 2000ms
+3. **Selector Reliability**: Use the most specific selectors
+   - Test panel: `[aria-label="Testing"]`
+   - Expand arrows: `.monaco-tl-twistie`
+   - Test nodes: `.monaco-list-row:has-text("test_name")`
 4. **Build Verification**: Always ensure CMake builds complete before test discovery
-5. **Workspace Setup**: Use the unittest_ctest_sample as a controlled test environment
+5. **Single Instance**: Ensure only one VSCode instance runs during tests
 
-## Playwright Configuration (playwright.config.ts)
+## VSCode Launch Configuration
 
 ```typescript
-import { defineConfig } from '@playwright/test';
-import type { VSCodeTestOptions, VSCodeWorkerOptions } from '@mshanemc/vscode-test-playwright';
-import path from 'path';
-
-export default defineConfig<VSCodeTestOptions, VSCodeWorkerOptions>({
-  testDir: path.join(__dirname, 'specs'),
-  workers: 1,
-  timeout: 60000,
-  use: {
-    extensionDevelopmentPath: path.join(__dirname, '..', '..'),
-    vscodeTrace: 'on',
-    workspacePath: path.join(__dirname, 'unittest_ctest_sample'),
-  },
-  projects: [
-    { name: 'stable' },
+// Proper VSCode launch configuration for testing
+const helper = new VSCodeTestHelper({
+  workspacePath: workspacePath,
+  buildPath: buildPath,
+  additionalArgs: [
+    '--extensionDevelopmentPath=' + extensionPath,
+    // Don't use --disable-extensions as it prevents CMake Tools from loading
+    '--install-extension=ms-vscode.cmake-tools',
+    '--enable-proposed-api=' + extensionPath  // Enable proposed APIs if needed
   ],
+  initTimeout: 10000
 });
 ```
+
+## Known Issues and Solutions
+
+1. **CMake Tools Not Loading**: Don't use `--disable-extensions` flag
+2. **Test Panel Not Opening**: Use `[aria-label="Testing"]` selector first
+3. **Tests Not Visible**: Ensure root node is expanded with `.monaco-tl-twistie`
+4. **Multiple VSCode Instances**: Track and close all instances properly
 
 ## Additional Resources
 
