@@ -100,7 +100,7 @@ export class StateMonitor {
         fs.appendFileSync(this.consoleLogPath!, this.consoleCapture.join('\n') + '\n');
         this.lastConsoleCaptureLen = this.consoleCapture.length;
       }
-
+      // need to capture id="status.progress" under id="workbench.parts.statusbar"
       try {
         // Monitor status bar changes
         const statusBarItems = await this.page.$$eval('.statusbar-item', elements => 
