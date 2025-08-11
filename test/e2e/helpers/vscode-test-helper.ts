@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { VSCodeManager } from './vscode-manager';
+import { StateMonitor, StateType } from './state-monitor';
 
 const execAsync = promisify(exec);
 
@@ -37,6 +38,7 @@ export class VSCodeTestHelper {
   private newPIDs: number[] = [];
   private config: VSCodeTestConfig;
   private defaultVSCodePath = 'C:\\Users\\ormas\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe';
+  private stateMonitor: StateMonitor;
 
   constructor(config: VSCodeTestConfig = {}) {
     this.config = {
@@ -50,6 +52,8 @@ export class VSCodeTestHelper {
       initTimeout: config.initTimeout || 5000,
       cleanupBuildDir: config.cleanupBuildDir !== false
     };
+    
+    this.stateMonitor = new StateMonitor(true);
   }
 
   /**
@@ -241,6 +245,16 @@ export class VSCodeTestHelper {
    * Clean up build directory if configured
    */
   async cleanup(): Promise<void> {
+    // Stop monitoring and print summary
+    this.stateMonitor.stopMonitoring();
+    console.log('\n' + this.stateMonitor.getSummary());
+    
+    const stats = this.stateMonitor.getStatistics();
+    console.log('\nState Monitor Statistics:');
+    console.log(`  Total records: ${stats.totalRecords}`);
+    console.log(`  Duration: ${(stats.duration / 1000).toFixed(2)} seconds`);
+    console.log(`  Records by type:`, stats.byType);
+    
     if (this.config.cleanupBuildDir && this.config.buildPath && fs.existsSync(this.config.buildPath)) {
       console.log('Cleaning up build directory...');
       fs.rmSync(this.config.buildPath, { recursive: true, force: true });
@@ -449,18 +463,155 @@ export class VSCodeTestHelper {
     }
     
     try {
+      // Check if the electron app is still alive
+      if (this.electronApp.process && this.electronApp.process().killed) {
+        console.log('VS Code process has been killed');
+        return null;
+      }
+      
       // Get the first window (main window)
       const windows = await this.electronApp.windows();
       if (windows.length > 0) {
         console.log(`Found ${windows.length} VS Code window(s)`);
-        return windows[0];
+        const mainWindow = windows[0];
+        
+        // Verify the window is still available
+        try {
+          await mainWindow.evaluate(() => document.title);
+        } catch (evalError) {
+          console.log('Window is no longer available:', evalError);
+          return null;
+        }
+        
+        // Start monitoring if we have a window and not already monitoring
+        if (mainWindow && !this.stateMonitor['isMonitoring']) {
+          let consoleStorage: string[] = [];
+          
+          // Start monitoring with console capture callback
+          await this.stateMonitor.startMonitoring(mainWindow, (messageStorage: string[]) => {
+            // Store the reference to the message storage array
+            consoleStorage = messageStorage;
+            console.log('Console capture registered for VS Code output');
+          });
+          
+          // Set up console listener to capture page console messages
+          mainWindow.on('console', (msg) => {
+            const text = msg.text();
+            const lines = text.split('\n');
+            const filteredLines = lines.filter(line => {
+              return line.includes('[CMakeTools]') && line.includes('[info]') && line.includes('[cmake]');
+            });
+            if (consoleStorage) {
+              consoleStorage.push(...filteredLines);
+            }
+          });
+          
+        }
+        
+        return mainWindow;
       }
       console.log('No VS Code windows found');
       return null;
     } catch (error: any) {
       console.error('Failed to get VS Code window:', error);
+      // If the error is about the application being closed, don't retry
+      if (error.message && error.message.includes('Application exited')) {
+        console.log('VS Code application has exited');
+        return null;
+      }
       return null;
     }
+  }
+  
+  /**
+   * Execute a VS Code command via Command Palette
+   */
+  async executeCommand(page: Page, command: string): Promise<boolean> {
+    try {
+      this.stateMonitor.recordAction(`Executing command: ${command}`);
+      
+      // Open command palette
+      await page.keyboard.press('Control+Shift+P');
+      await page.waitForTimeout(1000);
+      
+      // Type command
+      await page.keyboard.type(command);
+      await page.waitForTimeout(1000);
+      
+      // Execute
+      await page.keyboard.press('Enter');
+      
+      this.stateMonitor.recordAction(`Command executed: ${command}`);
+      return true;
+    } catch (error) {
+      this.stateMonitor.addRecord(StateType.STATUS, `Failed to execute command: ${command}`);
+      return false;
+    }
+  }
+  
+  /**
+   * Send keyboard shortcut
+   */
+  async sendShortcut(page: Page, shortcut: string): Promise<boolean> {
+    try {
+      this.stateMonitor.recordAction(`Sending shortcut: ${shortcut}`);
+      await page.keyboard.press(shortcut);
+      return true;
+    } catch (error) {
+      this.stateMonitor.addRecord(StateType.STATUS, `Failed to send shortcut: ${shortcut}`);
+      return false;
+    }
+  }
+  
+  /**
+   * Type text in VS Code
+   */
+  async typeText(page: Page, text: string): Promise<boolean> {
+    try {
+      this.stateMonitor.recordAction(`Typing text: ${text.substring(0, 50)}...`);
+      await page.keyboard.type(text);
+      return true;
+    } catch (error) {
+      this.stateMonitor.addRecord(StateType.STATUS, `Failed to type text`);
+      return false;
+    }
+  }
+  
+  /**
+   * Get the state monitor instance and current step
+   */
+  getStateMonitor(): { stateMonitor: StateMonitor; step_idx: number } {
+    return {
+      stateMonitor: this.stateMonitor,
+      step_idx: this.stateMonitor.getCurrentStep()
+    };
+  }
+  
+  /**
+   * Wait for specific state in status bar
+   */
+  async waitForStatusBarState(
+    page: Page, 
+    expectedText: string, 
+    timeoutMs: number = 30000
+  ): Promise<boolean> {
+    this.stateMonitor.recordAction(`Waiting for status bar state: ${expectedText}`);
+    
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutMs) {
+      const statusBarItems = await this.getAllElementsText(page, '.statusbar-item');
+      const statusText = statusBarItems.join(' ').toLowerCase();
+      
+      if (statusText.includes(expectedText.toLowerCase())) {
+        this.stateMonitor.recordAction(`Found expected state: ${expectedText}`);
+        return true;
+      }
+      
+      await page.waitForTimeout(1000);
+    }
+    
+    this.stateMonitor.addRecord(StateType.STATUS, `Timeout waiting for state: ${expectedText}`);
+    return false;
   }
 
   /**
