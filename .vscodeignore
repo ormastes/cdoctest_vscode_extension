@@ -9,3 +9,15 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+test/**
+!test/integrated_unit_gtest_and_cdoctest_cmake_ctest/**
+build/**
+*.vsix
+.git/**
+.github/**
+**/*.spec.js
+**/*.test.js
+test/e2e/.test-extensions/**
+node_modules/**
+!node_modules/fast-glob/**
+!node_modules/tslib/**

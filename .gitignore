@@ -13,18 +13,31 @@ coverage/
 **/build/*
 **/*.vsix
 
-# E2E test temporary files
+# E2E test folders
+test/e2e/.test-extensions/
 test/e2e/temp-vscode-profile/
 test/e2e/temp-vscode-extensions/
 test/e2e/playwright-report/
 test/e2e/test-results/
+test/e2e/test-workspace/build/
+test/e2e/screenshots/
+test/e2e/logs/
+
+# Generated reports folder
+gen/
+
+# Test results folder
 test-results/
+
+# E2E compiled files
 test/e2e/*.js
 test/e2e/*.js.map
 test/e2e/**/*.js
 test/e2e/**/*.js.map
 test/e2e/output.vsc
-test/e2e/test-workspace/build/
-test/e2e/screenshots/
-test/e2e/logs/
+
+# Log files
 *.log
+
+# Temporary null file
+nul
