@@ -81,3 +81,6 @@ If tests are not discovered:
 2. For CMake projects, ensure CMake is properly configured
 3. Check the output panel for any error messages
 4. Verify that cdoctest is properly installed if using cdoctest features
+
+## TODO
+add clangd path Configuration.
