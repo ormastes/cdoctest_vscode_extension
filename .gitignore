@@ -12,6 +12,7 @@ dist/
 coverage/
 **/build/*
 **/*.vsix
+*.vsix
 
 # E2E test folders
 test/e2e/.test-extensions/
