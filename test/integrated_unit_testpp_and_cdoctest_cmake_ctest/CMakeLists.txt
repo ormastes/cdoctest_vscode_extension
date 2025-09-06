@@ -29,3 +29,6 @@ target_link_libraries(hello_test hello_test_lib)
 
 # Discover tests with location
 discover_tests_with_location(hello_test unittest-cpp)
+
+# Add subdirectory for recursive test
+add_subdirectory(subdir_tests)

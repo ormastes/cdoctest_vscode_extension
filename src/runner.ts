@@ -55,7 +55,9 @@ function addSpawnListeners(cdocRefreshProcess: ChildProcess, sessionName:string,
         if (cdocRefreshProcess !== undefined) {
             cdocRefreshProcess.kill();
         }
-        reject(error);
+        // Ensure we resolve even on error to prevent hanging
+        handlClose(sessionName, sessionId, 1);
+        resolve();
     });
     cdocRefreshProcess.on('close', async (code) => {
         // Process any remaining buffer content
@@ -177,14 +179,21 @@ export async function launchDebugSessionWithCloseHandler(
             // Perform any cleanup or further actions here.
             if (isUseFile) {
                 if (! await fileExists(vscode.Uri.file(resultFile))) {
-                    // If no result file, pass exit code if available
-                    resultHandler('', exitCode);
+                    // If no result file, pass error message with exit code
+                    const errorMsg = exitCode !== 0 
+                        ? `Test failed with exit code ${exitCode}. No result file found at ${resultFile}`
+                        : `No result file found at ${resultFile}`;
+                    resultHandler(errorMsg, exitCode);
                     return;
                 }
                 await getResultFromFile(resultFile, resultHandler, reject, exitCode);
             } else {
                 if (!stdoutLines[sessionId]) {
-                    resultHandler('', exitCode);
+                    // No stdout captured, report with exit code
+                    const errorMsg = exitCode !== 0 
+                        ? `Test failed with exit code ${exitCode}. No output captured`
+                        : 'Test completed with no output';
+                    resultHandler(errorMsg, exitCode);
                     return;
                 }
                 let output = stdoutLines[sessionId].join('\n');
@@ -386,6 +395,7 @@ async function getResultFromFile(resultFile: string, resultHandler: (result: str
         resultHandler(testList, exitCode);
     } catch (error) {
         console.error(`Error reading result file: ${error}`);
-        reject(error);
+        // Call resultHandler with error message to ensure test completes
+        resultHandler(`Error reading result file: ${error}`, exitCode);
     }
 }

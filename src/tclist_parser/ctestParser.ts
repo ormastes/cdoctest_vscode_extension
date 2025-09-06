@@ -26,13 +26,67 @@ export class CTestParser {
         this.config = config;
     }
 
+    private recursiveIncludeCTestFile(filePath: string, processedFiles: Set<string> = new Set()): string[] {
+        const absolutePath = path.resolve(filePath);
+        
+        if (processedFiles.has(absolutePath)) {
+            return [];
+        }
+        
+        processedFiles.add(absolutePath);
+        const result: string[] = [absolutePath];
+        
+        if (!fs.existsSync(absolutePath)) {
+            return [];
+        }
+        
+        try {
+            const content = fs.readFileSync(absolutePath, 'utf8');
+            const lines = content.split('\n');
+            
+            for (const line of lines) {
+                const includeMatch = line.match(/^\s*include\s*\(\s*"?([^")\s]+)"?\s*\)/i);
+                const subdirsMatch = line.match(/^\s*subdirs\s*\(\s*"?([^")\s]+)"?\s*\)/i);
+                const addSubdirMatch = line.match(/^\s*add_subdirectory\s*\(\s*"?([^")\s]+)"?\s*\)/i);
+                
+                if (includeMatch) {
+                    const includedFile = includeMatch[1];
+                    const includedPath = path.isAbsolute(includedFile) 
+                        ? includedFile 
+                        : path.join(path.dirname(absolutePath), includedFile);
+                    
+                    const includedFiles = this.recursiveIncludeCTestFile(includedPath, processedFiles);
+                    result.push(...includedFiles);
+                }
+                
+                if (subdirsMatch || addSubdirMatch) {
+                    const subdir = (subdirsMatch || addSubdirMatch)![1];
+                    const subdirPath = path.isAbsolute(subdir)
+                        ? subdir
+                        : path.join(path.dirname(absolutePath), subdir);
+                    
+                    const ctestFile = path.join(subdirPath, 'CTestTestfile.cmake');
+                    if (fs.existsSync(ctestFile)) {
+                        const subdirFiles = this.recursiveIncludeCTestFile(ctestFile, processedFiles);
+                        result.push(...subdirFiles);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error(`Error processing CTest file ${absolutePath}:`, error);
+        }
+        
+        return result;
+    }
+
     private findCTestFiles(): string[] {
-        const files: string[] = [];
+        const allFiles = new Set<string>();
         const buildDirectory = this.config.buildDirectory;
         const baseFile = path.join(buildDirectory, 'CTestTestfile.cmake');
         
         if (fs.existsSync(baseFile)) {
-            files.push(baseFile);
+            const includedFiles = this.recursiveIncludeCTestFile(baseFile);
+            includedFiles.forEach(file => allFiles.add(file));
         }
 
         // Check if this is a multi-config generator (determined by presence of build type subdirectories)
@@ -40,8 +94,9 @@ export class CTestParser {
         if (buildType) {
             const configFile = path.join(buildDirectory, buildType, 'CTestTestfile.cmake');
             if (fs.existsSync(configFile)) {
-                files.push(configFile);
-                return files; // Return early if we found the specific build type
+                const includedFiles = this.recursiveIncludeCTestFile(configFile);
+                includedFiles.forEach(file => allFiles.add(file));
+                return Array.from(allFiles);
             }
         }
         
@@ -50,11 +105,12 @@ export class CTestParser {
         for (const config of configs) {
             const configFile = path.join(buildDirectory, config, 'CTestTestfile.cmake');
             if (fs.existsSync(configFile)) {
-                files.push(configFile);
+                const includedFiles = this.recursiveIncludeCTestFile(configFile);
+                includedFiles.forEach(file => allFiles.add(file));
             }
         }
 
-        return files;
+        return Array.from(allFiles);
     }
 
     private parseCTestFile(filePath: string): CTestCase[] {

@@ -6,6 +6,7 @@ A VSCode extension for running C++ tests with multiple test framework support in
 
 - **Multiple Test Frameworks**: Support for cdoctest, executable tests, binary tests, and CMake/CTest integration
 - **CTest Integration**: Automatically discovers and runs tests through CTest when CMake is configured
+  - **Recursive Include Support**: Automatically follows `include()`, `subdirs()`, and `add_subdirectory()` commands in CTestTestfile.cmake files
 - **Test Explorer Integration**: Full integration with VSCode's native Test Explorer
 - **Debugging Support**: Debug tests with multiple debugger backends (LLDB, GDB, Visual Studio)
 - **Configurable Test Types**: Enable/disable specific test configurations via settings
@@ -58,6 +59,11 @@ The extension automatically selects the appropriate debugger based on your platf
 You can override the debugger type in your `launch.json` configuration.
 
 ## Recent Updates
+
+### Version 0.6.3
+- Added support for recursive CTest file includes through `include()`, `subdirs()`, and `add_subdirectory()` commands
+- Fixed test running spinner to properly stop when tests complete
+- Improved CTest parser to handle nested test directory structures
 
 ### Version 0.5.0
 - Added support for Visual Studio and GDB debuggers alongside LLDB
