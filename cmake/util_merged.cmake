@@ -155,7 +155,7 @@ endif()
 ")
 
   # Write the discovery script to a file
-  set(_discover_script "${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET}_discover.cmake")
+  set(_discover_script "${CMAKE_CURRENT_BINARY_DIR}/$<IF:$<BOOL:$<CONFIG>>,$<CONFIG>/,>${TEST_TARGET}_discover.cmake")
   file(GENERATE OUTPUT "${_discover_script}" CONTENT "${_discover_script_content}")
 
   if(MODE STREQUAL "POST_BUILD")
