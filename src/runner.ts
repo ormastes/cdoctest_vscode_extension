@@ -291,9 +291,15 @@ export function runProgramWithLibPaths(
 ): ChildProcess | Promise<void> {
     // Clone the current process environment
     const env: { [key: string]: string } = {};
+    var pathExist = false;
     for (const key in process.env) {
         if (process.env[key] !== undefined) {
             env[key] = process.env[key] as string;
+        }
+        if (key.toLowerCase() === "path") {
+            pathExist = true;
+            const programDir = path.dirname(program);
+            env[key] = env[key]+';'+programDir;
         }
     }
 
