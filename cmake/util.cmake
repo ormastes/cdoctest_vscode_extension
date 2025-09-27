@@ -41,11 +41,11 @@ function(discover_tests_with_location)
 
   # choose the right list+XML command arguments for each framework
   if(FRAMEWORK STREQUAL "gtest")
-    # Google Test: output XML with test information
-    set(_test_args --gtest_output=xml:${_output_file})
+    # Google Test: list tests + XML reporter in one invocation
+    set(_test_args --gtest_list_tests --gtest_output=xml:${_output_file})
   elseif(FRAMEWORK STREQUAL "catch2")
-    # Catch2 v3: XML reporter
-    set(_test_args --reporter xml --out ${_output_file})
+    # Catch2 v3: list-tests + XML reporter
+    set(_test_args --list-tests --reporter xml:${_output_file})
   elseif(FRAMEWORK STREQUAL "unittest-cpp")
     # UnitTest++: use GetTcList: to get test list
     set(_test_args GetTcList:)
@@ -171,7 +171,7 @@ if(\"${FRAMEWORK}\" STREQUAL \"unittest-cpp\")
   message(STATUS \"Discovered \${_test_count} tests from \${TEST_TARGET}\")
   
 elseif(\"${FRAMEWORK}\" STREQUAL \"gtest\")
-  # Parse Google Test XML format
+  # Prse Google Test XML format
   # The XML file should have been created by running with --gtest_output=xml
   
   # Read the XML content
@@ -194,23 +194,27 @@ elseif(\"${FRAMEWORK}\" STREQUAL \"gtest\")
   # Write test entries
   file(APPEND \"\${_ctest_file}\" \"# BEGIN \${TEST_TARGET} tests\\n\")
   
-  # Parse gtest XML format: <testcase name=\"TestName\" classname=\"SuiteName\" file=\"path\" line=\"123\"/>
+  # Parse gtest XML format: <test(case/suite) name=\"TestName\" 
   string(REGEX MATCHALL
-    \"<testcase[^>]+name=\\\"([^\\\"]+)\\\"[^>]+classname=\\\"([^\\\"]+)\\\"[^>]*>\"
+    \"<test[^>]+name=\\\"([^\\\"]+)\\\"[^>]*>\"
     _entries
     \"\${_xml_content}\"
   )
   
   set(_test_count 0)
-  foreach(_entry IN LISTS _entries)
-    # Extract test name and class name
-    string(REGEX REPLACE
-      \".*name=\\\"([^\\\"]+)\\\".*classname=\\\"([^\\\"]+)\\\".*\"
-      \"\\\\2;\\\\1\"
-      _parts \"\${_entry}\"
-    )
-    list(GET _parts 0 _suite_name)
-    list(GET _parts 1 _test_name)
+  foreach(_e IN LISTS _entries)
+    # suite: keep name as current
+    if(_e MATCHES \"^<test[^>]*name=\\\"([^\\\"]+)\\\"\")
+      set(_name \"\${CMAKE_MATCH_1}\")
+    endif()
+
+    string(STRIP \"\${_entry}\" _entry)
+    string(FIND \"\${_entry}\" \"<testsuite \" position)
+    if(position EQUAL 0)
+        set(_suite_name \"\${_name}\")
+        continue()
+    endif()
+    set(_test_name \"\${_name}\")
     set(_full_test_name \"\${_suite_name}.\${_test_name}\")
     
     # Try to extract file and line from the XML entry
