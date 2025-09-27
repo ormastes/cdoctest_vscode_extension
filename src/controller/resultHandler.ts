@@ -156,11 +156,11 @@ export async function getCTestDiscoveryHandler(ctrl: vscode.TestController, conf
         let fixtureItem = ctrl.items.get(fixtureName);
         
         if (!fixtureItem) {
-            // Use the first test's file as the fixture URI
+            // Use the first test's file as the fixture URI only if testFile is available
             const firstTest = tests[0];
-            const uri = firstTest.testFile 
+            const uri = firstTest.testFile && firstTest.testFile.trim() !== ''
                 ? vscode.Uri.file(firstTest.testFile)
-                : vscode.Uri.file(firstTest.executable);
+                : undefined;
                 
             fixtureItem = ctrl.createTestItem(fixtureName, fixtureName, uri);
             fixtureItem.canResolveChildren = true;
@@ -172,9 +172,9 @@ export async function getCTestDiscoveryHandler(ctrl: vscode.TestController, conf
             let testItem = fixtureItem.children.get(fullTestId);
             
             if (!testItem) {
-                const uri = test.testFile 
+                const uri = test.testFile && test.testFile.trim() !== ''
                     ? vscode.Uri.file(test.testFile)
-                    : vscode.Uri.file(test.executable);
+                    : undefined;
                     
                 const testLabel = fullTestId.includes('::') 
                     ? fullTestId.split('::').pop()! 

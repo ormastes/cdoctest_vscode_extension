@@ -23,4 +23,6 @@ add_executable(hello_test test_main.cpp)
 target_link_libraries(hello_test gtest_main gtest)
 
 # Discover tests with location
-discover_tests_with_location(hello_test gtest)
+#discover_tests_with_location(hello_test gtest)
+include(GoogleTest)
+gtest_discover_tests(hello_test)

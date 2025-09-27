@@ -148,8 +148,9 @@ if(\"${FRAMEWORK}\" STREQUAL \"unittest-cpp\")
       list(GET _parts 2 _line_number)
       
       # Convert relative path to absolute path
+      # The output file is generated in the build directory, so relative paths are relative to build dir
       if(NOT IS_ABSOLUTE \"\${_filename}\")
-        get_filename_component(_abs_filename \"\${CMAKE_CURRENT_SOURCE_DIR}/\${_filename}\" ABSOLUTE)
+        get_filename_component(_abs_filename \"\${CMAKE_CURRENT_BINARY_DIR}/\${_filename}\" ABSOLUTE)
       else()
         set(_abs_filename \"\${_filename}\")
       endif()
@@ -225,8 +226,9 @@ elseif(\"${FRAMEWORK}\" STREQUAL \"gtest\")
     if(_entry MATCHES \"file=\\\"([^\\\"]+)\\\"\")
       set(_test_file \"\${CMAKE_MATCH_1}\")
       # Convert relative path to absolute
+      # The XML file is generated in the build directory, so relative paths are relative to build dir
       if(NOT IS_ABSOLUTE \"\${_test_file}\")
-        get_filename_component(_test_file \"\${CMAKE_CURRENT_SOURCE_DIR}/\${_test_file}\" ABSOLUTE)
+        get_filename_component(_test_file \"\${CMAKE_CURRENT_BINARY_DIR}/\${_test_file}\" ABSOLUTE)
       endif()
     endif()
     
@@ -272,50 +274,83 @@ elseif(\"${FRAMEWORK}\" STREQUAL \"catch2\")
   # Write test entries
   file(APPEND \"\${_ctest_file}\" \"# BEGIN \${TEST_TARGET} tests\\n\")
   
-  # Parse Catch2 XML format: <TestCase name=\"TestName\" filename=\"path\" line=\"123\">
-  string(REGEX MATCHALL
-    \"<TestCase[^>]+name=\\\"([^\\\"]+)\\\"[^>]*>\"
-    _entries
-    \"\${_xml_content}\"
-  )
-  
   set(_test_count 0)
-  foreach(_entry IN LISTS _entries)
-    # Extract test name
-    string(REGEX REPLACE
-      \".*name=\\\"([^\\\"]+)\\\".*\"
-      \"\\\\1\"
-      _test_name \"\${_entry}\"
-    )
+  
+  # First, find all TestCase entries
+  string(REGEX MATCHALL \"<TestCase[^>]*name=\\\"([^\\\"]+)\\\"[^>]*filename=\\\"([^\\\"]+)\\\"[^>]*line=\\\"([^\\\"]+)\\\"[^>]*>\" _test_case_headers \"\${_xml_content}\")
+  
+  foreach(_test_case_header IN LISTS _test_case_headers)
+    # Extract TestCase attributes
+    string(REGEX MATCH \"name=\\\"([^\\\"]+)\\\"\" _name_match \"\${_test_case_header}\")
+    string(REGEX MATCH \"filename=\\\"([^\\\"]+)\\\"\" _file_match \"\${_test_case_header}\")
+    string(REGEX MATCH \"line=\\\"([^\\\"]+)\\\"\" _line_match \"\${_test_case_header}\")
     
-    # Try to extract file and line from the XML entry
-    set(_test_file \"\${CMAKE_CURRENT_SOURCE_DIR}/test_main.cpp\")
-    set(_test_line \"0\")
-    
-    # Look for filename attribute
-    if(_entry MATCHES \"filename=\\\"([^\\\"]+)\\\"\")
-      set(_test_file \"\${CMAKE_MATCH_1}\")
-      # Convert relative path to absolute
-      if(NOT IS_ABSOLUTE \"\${_test_file}\")
-        get_filename_component(_test_file \"\${CMAKE_CURRENT_SOURCE_DIR}/\${_test_file}\" ABSOLUTE)
-      endif()
+    if(NOT _name_match OR NOT _file_match OR NOT _line_match)
+      continue()
     endif()
     
-    # Look for line attribute
-    if(_entry MATCHES \"line=\\\"([0-9]+)\\\"\")
-      set(_test_line \"\${CMAKE_MATCH_1}\")
+    string(REGEX REPLACE \"name=\\\"([^\\\"]+)\\\"\" \"\\\\1\" _test_case_name \"\${_name_match}\")
+    string(REGEX REPLACE \"filename=\\\"([^\\\"]+)\\\"\" \"\\\\1\" _test_file \"\${_file_match}\")
+    string(REGEX REPLACE \"line=\\\"([^\\\"]+)\\\"\" \"\\\\1\" _test_line \"\${_line_match}\")
+    
+    # Convert relative path to absolute
+    # The XML file is generated in the build directory, so relative paths are relative to build dir
+    if(NOT IS_ABSOLUTE \"\${_test_file}\")
+      get_filename_component(_test_file \"\${CMAKE_CURRENT_BINARY_DIR}/\${_test_file}\" ABSOLUTE)
     endif()
     
-    # Write to CTest file
-    file(APPEND \"\${_ctest_file}\" \"add_test(\\\"\${_test_name}\\\" \\\"\${CMAKE_CURRENT_BINARY_DIR}/\${TEST_TARGET}\${CMAKE_EXECUTABLE_SUFFIX}\\\" \\\"\${_test_name}\\\")\\n\")
-    file(APPEND \"\${_ctest_file}\" \"set_tests_properties(\\\"\${_test_name}\\\" PROPERTIES\\n\")
-    file(APPEND \"\${_ctest_file}\" \"  WORKING_DIRECTORY \\\"\${CMAKE_CURRENT_BINARY_DIR}\\\"\\n\")
-    file(APPEND \"\${_ctest_file}\" \"  TEST_FILE \\\"\${_test_file}\\\"\\n\")
-    file(APPEND \"\${_ctest_file}\" \"  TEST_LINE \\\"\${_test_line}\\\"\\n\")
-    file(APPEND \"\${_ctest_file}\" \"  TEST_FULL_NAME \\\"\${_test_name}\\\"\\n\")
-    file(APPEND \"\${_ctest_file}\" \"  TEST_FRAMEWORK \\\"catch2\\\"\\n\")
-    file(APPEND \"\${_ctest_file}\" \")\\n\")
-    math(EXPR _test_count \"\${_test_count} + 1\")
+    # Check if this test case has sections by parsing the XML structure properly
+    set(_has_sections FALSE)
+    set(_sections_for_this_test \"\")
+    
+    # Simplified approach: use regex to find TestCase blocks with sections
+    # Look for TestCase blocks that contain sections
+    # Pattern: <TestCase name=\"testname\"...> ... <Section name=\"sectionname\"...> ... </TestCase>
+    
+    # Create a unique marker for this test case to find its block
+    set(_test_marker \"<TestCase[^>]*name=\\\"\${_test_case_name}\\\"\")
+    
+    # Check if the XML contains sections associated with this test case
+    # We'll use a simple heuristic: if there are sections in the XML and this test name suggests it has sections
+    string(REGEX MATCHALL \"<Section[^>]*name=\\\"([^\\\"]+)\\\"\" _all_section_matches \"\${_xml_content}\")
+    if(_all_section_matches AND _test_case_name MATCHES \".*Sections.*\")
+      set(_has_sections TRUE)
+      # Extract all section names (this is a simplified approach)
+      foreach(_section_match IN LISTS _all_section_matches)
+        string(REGEX REPLACE \"<Section[^>]* name=\\\"([^\\\"]+)\\\".*\" \"\\\\1\" _section_name \"\${_section_match}\")
+        list(APPEND _sections_for_this_test \"\${_section_name}\")
+      endforeach()
+    endif()
+    
+    if(_has_sections)
+      # TestCase has sections - create individual tests for each section
+      foreach(_section_name IN LISTS _sections_for_this_test)
+        set(_full_test_name \"\${_test_case_name} - \${_section_name}\")
+        
+        # Write to CTest file
+        file(APPEND \"\${_ctest_file}\" \"add_test(\\\"\${_full_test_name}\\\" \\\"\${CMAKE_CURRENT_BINARY_DIR}/\${TEST_TARGET}\${CMAKE_EXECUTABLE_SUFFIX}\\\" \\\"\${_test_case_name}\\\" \\\"-c\\\" \\\"\${_section_name}\\\")\\n\")
+        file(APPEND \"\${_ctest_file}\" \"set_tests_properties(\\\"\${_full_test_name}\\\" PROPERTIES\\n\")
+        file(APPEND \"\${_ctest_file}\" \"  WORKING_DIRECTORY \\\"\${CMAKE_CURRENT_BINARY_DIR}\\\"\\n\")
+        file(APPEND \"\${_ctest_file}\" \"  TEST_FILE \\\"\${_test_file}\\\"\\n\")
+        file(APPEND \"\${_ctest_file}\" \"  TEST_LINE \\\"\${_test_line}\\\"\\n\")
+        file(APPEND \"\${_ctest_file}\" \"  TEST_FULL_NAME \\\"\${_full_test_name}\\\"\\n\")
+        file(APPEND \"\${_ctest_file}\" \"  TEST_FRAMEWORK \\\"catch2\\\"\\n\")
+        file(APPEND \"\${_ctest_file}\" \")\\n\")
+        math(EXPR _test_count \"\${_test_count} + 1\")
+      endforeach()
+    else()
+      # TestCase has no sections - treat as single test
+      # Write to CTest file
+      file(APPEND \"\${_ctest_file}\" \"add_test(\\\"\${_test_case_name}\\\" \\\"\${CMAKE_CURRENT_BINARY_DIR}/\${TEST_TARGET}\${CMAKE_EXECUTABLE_SUFFIX}\\\" \\\"\${_test_case_name}\\\")\\n\")
+      file(APPEND \"\${_ctest_file}\" \"set_tests_properties(\\\"\${_test_case_name}\\\" PROPERTIES\\n\")
+      file(APPEND \"\${_ctest_file}\" \"  WORKING_DIRECTORY \\\"\${CMAKE_CURRENT_BINARY_DIR}\\\"\\n\")
+      file(APPEND \"\${_ctest_file}\" \"  TEST_FILE \\\"\${_test_file}\\\"\\n\")
+      file(APPEND \"\${_ctest_file}\" \"  TEST_LINE \\\"\${_test_line}\\\"\\n\")
+      file(APPEND \"\${_ctest_file}\" \"  TEST_FULL_NAME \\\"\${_test_case_name}\\\"\\n\")
+      file(APPEND \"\${_ctest_file}\" \"  TEST_FRAMEWORK \\\"catch2\\\"\\n\")
+      file(APPEND \"\${_ctest_file}\" \")\\n\")
+      math(EXPR _test_count \"\${_test_count} + 1\")
+    endif()
   endforeach()
   
   file(APPEND \"\${_ctest_file}\" \"# END \${TEST_TARGET} tests\\n\")
