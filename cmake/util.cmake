@@ -172,15 +172,15 @@ if(\"${FRAMEWORK}\" STREQUAL \"unittest-cpp\")
   message(STATUS \"Discovered \${_test_count} tests from \${TEST_TARGET}\")
   
 elseif(\"${FRAMEWORK}\" STREQUAL \"gtest\")
-  # Prse Google Test XML format
+  # Parse Google Test XML format
   # The XML file should have been created by running with --gtest_output=xml
-  
+
   # Read the XML content
   file(READ \"\${OUTPUT_FILE}\" _xml_content)
-  
+
   # Create CTest file
   set(_ctest_file \"\${CMAKE_CURRENT_BINARY_DIR}/CTestTestfile.cmake\")
-  
+
   # If we're in POST_BUILD mode, append to existing file
   if(EXISTS \"\${_ctest_file}\")
     file(READ \"\${_ctest_file}\" _existing_content)
@@ -191,52 +191,54 @@ elseif(\"${FRAMEWORK}\" STREQUAL \"gtest\")
       file(WRITE \"\${_ctest_file}\" \"\${_existing_content}\")
     endif()
   endif()
-  
+
   # Write test entries
   file(APPEND \"\${_ctest_file}\" \"# BEGIN \${TEST_TARGET} tests\\n\")
-  
-  # Parse gtest XML format: <test(case/suite) name=\"TestName\" 
+
+  # Parse gtest XML format: <testcase name=\"TestName\" file=\"filename\" line=\"linenumber\" classname=\"SuiteName\" />
+  # Note: testcase can be self-closing or have content (for failures)
   string(REGEX MATCHALL
-    \"<test[^>]+name=\\\"([^\\\"]+)\\\"[^>]*>\"
-    _entries
+    \"<testcase[^>]+>\"
+    _testcase_entries
     \"\${_xml_content}\"
   )
-  
+
   set(_test_count 0)
-  foreach(_e IN LISTS _entries)
-    # suite: keep name as current
-    if(_e MATCHES \"^<test[^>]*name=\\\"([^\\\"]+)\\\"\")
-      set(_name \"\${CMAKE_MATCH_1}\")
+  foreach(_entry IN LISTS _testcase_entries)
+    # Extract test name
+    if(_entry MATCHES \"name=\\\"([^\\\"]+)\\\"\")
+      set(_test_name \"\${CMAKE_MATCH_1}\")
+    else()
+      continue()
     endif()
 
-    string(STRIP \"\${_entry}\" _entry)
-    string(FIND \"\${_entry}\" \"<testsuite \" position)
-    if(position EQUAL 0)
-        set(_suite_name \"\${_name}\")
-        continue()
+    # Extract suite/class name
+    if(_entry MATCHES \"classname=\\\"([^\\\"]+)\\\"\")
+      set(_suite_name \"\${CMAKE_MATCH_1}\")
+      set(_full_test_name \"\${_suite_name}.\${_test_name}\")
+    else()
+      set(_suite_name \"\")
+      set(_full_test_name \"\${_test_name}\")
     endif()
-    set(_test_name \"\${_name}\")
-    set(_full_test_name \"\${_suite_name}.\${_test_name}\")
-    
+
     # Try to extract file and line from the XML entry
     set(_test_file \"\${CMAKE_CURRENT_SOURCE_DIR}/test_main.cpp\")
     set(_test_line \"0\")
-    
+
     # Look for file attribute
     if(_entry MATCHES \"file=\\\"([^\\\"]+)\\\"\")
       set(_test_file \"\${CMAKE_MATCH_1}\")
-      # Convert relative path to absolute
-      # The XML file is generated in the build directory, so relative paths are relative to build dir
+      # Convert relative path to absolute if needed
       if(NOT IS_ABSOLUTE \"\${_test_file}\")
         get_filename_component(_test_file \"\${CMAKE_CURRENT_BINARY_DIR}/\${_test_file}\" ABSOLUTE)
       endif()
     endif()
-    
+
     # Look for line attribute
     if(_entry MATCHES \"line=\\\"([0-9]+)\\\"\")
       set(_test_line \"\${CMAKE_MATCH_1}\")
     endif()
-    
+
     # Write to CTest file
     file(APPEND \"\${_ctest_file}\" \"add_test(\\\"\${_full_test_name}\\\" \\\"\${CMAKE_CURRENT_BINARY_DIR}/\${TEST_TARGET}\${CMAKE_EXECUTABLE_SUFFIX}\\\" \\\"--gtest_filter=\${_full_test_name}\\\")\\n\")
     file(APPEND \"\${_ctest_file}\" \"set_tests_properties(\\\"\${_full_test_name}\\\" PROPERTIES\\n\")
@@ -248,7 +250,7 @@ elseif(\"${FRAMEWORK}\" STREQUAL \"gtest\")
     file(APPEND \"\${_ctest_file}\" \")\\n\")
     math(EXPR _test_count \"\${_test_count} + 1\")
   endforeach()
-  
+
   file(APPEND \"\${_ctest_file}\" \"# END \${TEST_TARGET} tests\\n\")
   message(STATUS \"Discovered \${_test_count} tests from \${TEST_TARGET}\")
   
