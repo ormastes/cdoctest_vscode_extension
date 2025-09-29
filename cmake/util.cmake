@@ -76,7 +76,7 @@ if(\"${FRAMEWORK}\" STREQUAL \"unittest-cpp\")
 elseif(\"${FRAMEWORK}\" STREQUAL \"gtest\")
   # For gtest, we need to run the tests to generate XML with file/line info
   execute_process(
-    COMMAND \${TEST_EXECUTABLE} --gtest_output=xml:\${OUTPUT_FILE}
+    COMMAND \${TEST_EXECUTABLE} --gtest_list_tests --gtest_output=xml:\${OUTPUT_FILE}
     RESULT_VARIABLE result
     OUTPUT_QUIET
     ERROR_QUIET
