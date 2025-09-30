@@ -198,22 +198,29 @@ elseif(\"${FRAMEWORK}\" STREQUAL \"gtest\")
   # Parse gtest XML format: <testcase name=\"TestName\" file=\"filename\" line=\"linenumber\" classname=\"SuiteName\" />
   # Note: testcase can be self-closing or have content (for failures)
   string(REGEX MATCHALL
-    \"<testcase[^>]+>\"
+    \"<testsuite[^>]*>|<testcase[^>]*/?>\"
     _testcase_entries
     \"\${_xml_content}\"
   )
 
   set(_test_count 0)
   foreach(_entry IN LISTS _testcase_entries)
+    string(STRIP \"\${_entry}\" _entry)
+    if(_entry MATCHES \"<testsuite name=\\\"([^\\\"]+)\\\"\")
+        set(_suite_name \"\${CMAKE_MATCH_1}\")
+        continue()
+    endif()
+    if(_entry MATCHES \"<\testsuite\")
+        set(_suite_name \"\")
+        continue()
+    endif()
     # Extract test name
     if(_entry MATCHES \"name=\\\"([^\\\"]+)\\\"\")
       set(_test_name \"\${CMAKE_MATCH_1}\")
-    else()
-      continue()
     endif()
 
     # Extract suite/class name
-    if(_entry MATCHES \"classname=\\\"([^\\\"]+)\\\"\")
+    if(_suite_name)
       set(_suite_name \"\${CMAKE_MATCH_1}\")
       set(_full_test_name \"\${_suite_name}.\${_test_name}\")
     else()
