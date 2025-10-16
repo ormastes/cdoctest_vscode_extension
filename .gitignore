@@ -43,3 +43,16 @@ test/e2e/output.vsc
 # Temporary null file
 nul
 *.vsix
+
+# CMake build artifacts in test directories
+test/**/CMakeCache.txt
+test/**/CMakeFiles/
+test/**/CTestTestfile.cmake
+test/**/DartConfiguration.tcl
+test/**/cmake_install.cmake
+test/**/_deps/
+test/**/build.ninja
+test/**/.ninja_deps
+test/**/.ninja_log
+test/**/*_discover.cmake
+test/**/output.vsc

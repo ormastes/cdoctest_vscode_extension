@@ -1,10 +1,41 @@
 
 import * as vscode from 'vscode';
-import { CMakeToolsApi, getCMakeToolsApi, Project, Version } from 'vscode-cmake-tools';
 
 import * as fs from 'fs';
 import * as path from 'path';
 import fg from 'fast-glob';
+
+// CMake Tools API interfaces
+// Based on the ms-vscode.cmake-tools extension API
+interface CMakeToolsApi {
+    getVersion(): { major: number; minor: number };
+    getProject(workspaceUri: vscode.Uri): Promise<Project | undefined>;
+    onActiveProjectChanged: vscode.Event<vscode.Uri | undefined>;
+    onBuildTargetChanged: vscode.Event<string>;
+}
+
+interface Project {
+    getActiveBuildType(): Promise<string | undefined>;
+}
+
+enum Version {
+    v1 = 1,
+    v2 = 2
+}
+
+// Function to get CMake Tools API from the extension
+async function getCMakeToolsApi(version: Version): Promise<CMakeToolsApi | undefined> {
+    const cmakeExtension = vscode.extensions.getExtension<CMakeToolsApi>('ms-vscode.cmake-tools');
+    if (!cmakeExtension) {
+        return undefined;
+    }
+
+    if (!cmakeExtension.isActive) {
+        await cmakeExtension.activate();
+    }
+
+    return cmakeExtension.exports;
+}
 
 interface Artifact {
     path: string;
@@ -386,7 +417,7 @@ export class Config {
         if (!this.useCmakeTarget) {
             this.activeWorkspace(this);
         } else {
-            getCMakeToolsApi(Version.v2, /*exactMatch*/ false).then(cmakeApi => {
+            getCMakeToolsApi(Version.v2).then(cmakeApi => {
                 if (!cmakeApi) {
                     vscode.window.showErrorMessage('CMake Tools API is unavailable. Please install CMake Tools.', 'OK');
                     return;

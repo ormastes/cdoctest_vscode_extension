@@ -60,6 +60,12 @@ You can override the debugger type in your `launch.json` configuration.
 
 ## Recent Updates
 
+### Version 0.7.0
+- **Modernized CMake Tools Integration**: Removed outdated `vscode-cmake-tools` npm dependency
+- Updated to use modern CMake Tools extension API through VSCode's native extension system
+- Improved compatibility with latest CMake Tools extension versions
+- Reduced dependency footprint for better maintainability
+
 ### Version 0.6.3
 - Added support for recursive CTest file includes through `include()`, `subdirs()`, and `add_subdirectory()` commands
 - Fixed test running spinner to properly stop when tests complete
