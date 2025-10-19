@@ -457,22 +457,27 @@ export class Config {
 
                 // Monitor for build target changes using workspace configuration changes
                 // The CMake Tools extension updates configurations when targets change
+                console.log('⚙️  CMake configuration change listener registered');
                 const configBuildTargetDisposable = vscode.workspace.onDidChangeConfiguration((e) => {
                     if (e.affectsConfiguration('cmake.launchTargetPath') || e.affectsConfiguration('cmake.buildTarget')) {
+                        console.log('🔧 CMake configuration changed (launchTargetPath or buildTarget)');
                         // Get the current build target from CMake Tools
                         vscode.commands.executeCommand<string>('cmake.launchTargetPath').then(launchTarget => {
                             if (launchTarget) {
                                 // Extract target name from the launch target path
                                 const targetName = path.basename(launchTarget, path.extname(launchTarget));
                                 this.cmakeTarget = targetName;
+                                console.log(`   → Target: ${targetName}`);
 
                                 vscode.commands.executeCommand<string>('cmake.buildDirectory')
                                     .then(targetDir => {
                                         this.cmakeBuildDirectory = targetDir;
+                                        console.log(`   → Build directory: ${targetDir}`);
                                         getExecutablePath(this.cmakeBuildType, this.cmakeBuildDirectory, this.cmakeTarget)
                                             .then(targetPath => {
                                                 if (targetPath !== null) {
                                                     this.cmakeLaunchTargetPath = targetPath || "";
+                                                    console.log(`   → Executable path: ${this.cmakeLaunchTargetPath}`);
                                                 }
                                             });
                                     });
@@ -484,7 +489,9 @@ export class Config {
                 // onActiveProjectChanged is a vscode.Event which should be a callable function
                 if (cmakeApi.onActiveProjectChanged && typeof cmakeApi.onActiveProjectChanged === 'function') {
                     try {
+                        console.log('📡 CMake onActiveProjectChanged listener registered');
                         const configDoneDisposable = cmakeApi.onActiveProjectChanged((projectUri) => {
+                            console.log(`🔄 CMake active project changed: ${projectUri?.fsPath || 'undefined'}`);
                             if (projectUri && cmakeApi && cmakeApi.getProject) {
                                 cmakeApi.getProject(projectUri).then(this.updateProject);
                             }

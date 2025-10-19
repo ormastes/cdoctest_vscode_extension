@@ -2,7 +2,7 @@
   "name": "cdoctest",
   "displayName": "cdoctest",
   "description": "Run cdocttest and executable tc runner.",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "publisher": "ormastes",
   "repository": "https://github.com/ormastes/cdoctest_vscode_extension",
   "engines": {

@@ -269,17 +269,29 @@ export class CTestParser {
 
     public async watchForChanges(callback: () => void): Promise<vscode.Disposable> {
         const watchers: vscode.FileSystemWatcher[] = [];
-        
+
         const basePattern = new vscode.RelativePattern(this.config.buildDirectory, '**/CTestTestfile.cmake');
         const watcher = vscode.workspace.createFileSystemWatcher(basePattern);
-        
-        watcher.onDidChange(() => callback());
-        watcher.onDidCreate(() => callback());
-        watcher.onDidDelete(() => callback());
-        
+
+        console.log(`📁 CTest file watcher registered for: ${this.config.buildDirectory}/**/CTestTestfile.cmake`);
+
+        watcher.onDidChange((uri) => {
+            console.log(`🔄 CTest file changed: ${uri.fsPath}`);
+            callback();
+        });
+        watcher.onDidCreate((uri) => {
+            console.log(`➕ CTest file created: ${uri.fsPath}`);
+            callback();
+        });
+        watcher.onDidDelete((uri) => {
+            console.log(`➖ CTest file deleted: ${uri.fsPath}`);
+            callback();
+        });
+
         watchers.push(watcher);
 
         return new vscode.Disposable(() => {
+            console.log('🛑 CTest file watcher disposed');
             watchers.forEach(w => w.dispose());
         });
     }
