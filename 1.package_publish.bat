@@ -1,3 +1,19 @@
-vsce package
+@echo off
+echo Cleaning build artifacts...
+call npm run clean
 
-vsce publish
+echo Cleaning node_modules to fix ELSPROBLEMS...
+if exist node_modules rmdir /s /q node_modules
+if exist package-lock.json del /q package-lock.json
+
+echo Installing dependencies...
+call npm install
+
+echo Compiling TypeScript...
+call npm run compile
+
+echo Packaging extension...
+npx @vscode/vsce package
+
+echo Publishing extension...
+npx @vscode/vsce publish

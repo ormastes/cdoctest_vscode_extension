@@ -104,8 +104,19 @@ export function initRunner(context: vscode.ExtensionContext) {
         }
     };
 
-    // Register the tracker factory for a specific debug type, e.g., 'node'
-    context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory('lldb-dap', trackerFactory));
+    // Register the tracker factory for lldb-dap (if available)
+    // This is optional - only needed for LLDB debugging on macOS
+    try {
+        const lldbExtension = vscode.extensions.getExtension('llvm-vs-code-extensions.lldb-dap');
+        if (lldbExtension) {
+            context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory('lldb-dap', trackerFactory));
+            console.log('LLDB-DAP debug adapter tracker registered');
+        } else {
+            console.log('LLDB-DAP extension not found - LLDB debugging will not be available');
+        }
+    } catch (error) {
+        console.warn('Failed to register LLDB-DAP debug adapter tracker:', error);
+    }
 }
 
 /**
@@ -158,7 +169,14 @@ export async function launchDebugSessionWithCloseHandler(
         } else if (process.platform === 'linux') {
             debugConfig.type = 'cppdbg';  // GDB debugger
         } else {
-            debugConfig.type = 'lldb-dap';  // LLDB for macOS and fallback
+            // macOS: Try LLDB first, fall back to cppdbg if not available
+            const lldbExtension = vscode.extensions.getExtension('llvm-vs-code-extensions.lldb-dap');
+            if (lldbExtension) {
+                debugConfig.type = 'lldb-dap';  // LLDB for macOS (preferred)
+            } else {
+                console.warn('LLDB-DAP not available, falling back to cppdbg');
+                debugConfig.type = 'cppdbg';  // Fallback to GDB/LLDB via cppdbg
+            }
         }
     }
     if (debugConfig.name === undefined || debugConfig.name === '') {

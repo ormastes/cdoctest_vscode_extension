@@ -8,15 +8,15 @@ import fg from 'fast-glob';
 // CMake Tools API interfaces
 // Based on the ms-vscode.cmake-tools extension API
 interface CMakeToolsApi {
-    getVersion(): { major: number; minor: number };
-    getProject(workspaceUri: vscode.Uri): Promise<Project | undefined>;
-    onActiveProjectChanged: vscode.Event<vscode.Uri | undefined>;
+    getVersion?(): { major: number; minor: number };
+    getProject?(workspaceUri: vscode.Uri): Promise<Project | undefined>;
+    onActiveProjectChanged?: vscode.Event<vscode.Uri | undefined>;
     // Note: onBuildTargetChanged is not available in the current API
     // We'll use vscode.workspace.onDidChangeConfiguration to monitor target changes
 }
 
 interface Project {
-    getActiveBuildType(): Promise<string | undefined>;
+    getActiveBuildType?(): Promise<string | undefined>;
 }
 
 enum Version {
@@ -418,12 +418,41 @@ export class Config {
         if (!this.useCmakeTarget) {
             this.activeWorkspace(this);
         } else {
+            // Check if CMake Tools extension is installed
+            const cmakeExtension = vscode.extensions.getExtension('ms-vscode.cmake-tools');
+            if (!cmakeExtension) {
+                vscode.window.showWarningMessage(
+                    'CMake Tools extension is not installed. CMake integration features will be disabled. ' +
+                    'Either install CMake Tools or disable "useCmakeTarget" in settings.',
+                    'Install CMake Tools',
+                    'Disable useCmakeTarget'
+                ).then(selection => {
+                    if (selection === 'Install CMake Tools') {
+                        vscode.commands.executeCommand('workbench.extensions.installExtension', 'ms-vscode.cmake-tools');
+                    } else if (selection === 'Disable useCmakeTarget') {
+                        vscode.workspace.getConfiguration('cdoctest').update('useCmakeTarget', false, vscode.ConfigurationTarget.Workspace);
+                    }
+                });
+                // Continue without CMake integration
+                this.activeWorkspace(this);
+                return;
+            }
+
             getCMakeToolsApi(Version.v2).then(cmakeApi => {
                 if (!cmakeApi) {
-                    vscode.window.showErrorMessage('CMake Tools API is unavailable. Please install CMake Tools.', 'OK');
+                    vscode.window.showWarningMessage(
+                        'CMake Tools API is unavailable. CMake integration features will be disabled.',
+                        'OK'
+                    );
+                    // Continue without CMake API
+                    this.activeWorkspace(this);
                     return;
                 }
                 this.cmakeApi = cmakeApi;
+
+                // Log CMake Tools version and available API methods for debugging
+                console.log(`CMake Tools version: ${cmakeExtension.packageJSON.version}`);
+                console.log('Available API methods:', Object.keys(cmakeApi || {}).join(', '));
 
 
                 // Monitor for build target changes using workspace configuration changes
@@ -451,16 +480,33 @@ export class Config {
                         });
                     }
                 });
-                const configDoneDisposable = cmakeApi.onActiveProjectChanged((projectUri) => {
-                    if (projectUri) {
-                        cmakeApi.getProject(projectUri).then(this.updateProject);
+                // Check if onActiveProjectChanged exists and is a function before using it
+                // onActiveProjectChanged is a vscode.Event which should be a callable function
+                if (cmakeApi.onActiveProjectChanged && typeof cmakeApi.onActiveProjectChanged === 'function') {
+                    try {
+                        const configDoneDisposable = cmakeApi.onActiveProjectChanged((projectUri) => {
+                            if (projectUri && cmakeApi && cmakeApi.getProject) {
+                                cmakeApi.getProject(projectUri).then(this.updateProject);
+                            }
+                        });
+                        this._disposables.push(configDoneDisposable);
+                    } catch (error) {
+                        console.warn('Failed to subscribe to onActiveProjectChanged:', error);
                     }
-                });
+                } else {
+                    console.warn('CMake Tools API: onActiveProjectChanged is not available or not a function');
+                }
 
-                cmakeApi.getProject(this.workspaceFolder.uri).then(this.updateProject);
+                // Check if getProject exists and is a function before calling it
+                if (cmakeApi.getProject && typeof cmakeApi.getProject === 'function') {
+                    cmakeApi.getProject(this.workspaceFolder.uri).then(this.updateProject).catch(error => {
+                        console.warn('Failed to get CMake project:', error);
+                    });
+                } else {
+                    console.warn('CMake Tools API: getProject is not available or not a function');
+                }
 
                 this._disposables.push(configBuildTargetDisposable);
-                this._disposables.push(configDoneDisposable);
             });
         }
     }
@@ -537,11 +583,19 @@ export class Config {
         if (project) {
             this.cmakeProject = project;
             this.cmakeSrcDirectory = this.workspaceFolder.uri.fsPath || "";
-            project.getActiveBuildType().then(buildType => {
-                this.cmakeBuildType = buildType || "";
+            // Check if getActiveBuildType exists and is a function before calling it
+            if (project.getActiveBuildType && typeof project.getActiveBuildType === 'function') {
+                project.getActiveBuildType().then(buildType => {
+                    this.cmakeBuildType = buildType || "";
+                    this.activeWorkspace(this);
+                }).catch(error => {
+                    console.warn('Failed to get active build type:', error);
+                    this.activeWorkspace(this);
+                });
+            } else {
+                console.warn('CMake Tools API: getActiveBuildType is not available or not a function on project');
                 this.activeWorkspace(this);
-            });
-
+            }
         }
     }
     public dispose(): void {
