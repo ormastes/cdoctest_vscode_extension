@@ -11,7 +11,8 @@ interface CMakeToolsApi {
     getVersion(): { major: number; minor: number };
     getProject(workspaceUri: vscode.Uri): Promise<Project | undefined>;
     onActiveProjectChanged: vscode.Event<vscode.Uri | undefined>;
-    onBuildTargetChanged: vscode.Event<string>;
+    // Note: onBuildTargetChanged is not available in the current API
+    // We'll use vscode.workspace.onDidChangeConfiguration to monitor target changes
 }
 
 interface Project {
@@ -425,20 +426,30 @@ export class Config {
                 this.cmakeApi = cmakeApi;
 
 
-                const configBuildTargetDisposable = cmakeApi.onBuildTargetChanged((target) => {
-                    this.cmakeTarget = target;
-                    vscode.commands.executeCommand<string>('cmake.buildDirectory')
-                        .then(targetDir => {
-                            this.cmakeBuildDirectory = targetDir;
-                            getExecutablePath(this.cmakeBuildType, this.cmakeBuildDirectory, this.cmakeTarget)
-                                .then(targetPath => {
-                                    if (targetPath !== null) {
-                                        this.cmakeLaunchTargetPath = targetPath || "";
-                                    }
-                                });
+                // Monitor for build target changes using workspace configuration changes
+                // The CMake Tools extension updates configurations when targets change
+                const configBuildTargetDisposable = vscode.workspace.onDidChangeConfiguration((e) => {
+                    if (e.affectsConfiguration('cmake.launchTargetPath') || e.affectsConfiguration('cmake.buildTarget')) {
+                        // Get the current build target from CMake Tools
+                        vscode.commands.executeCommand<string>('cmake.launchTargetPath').then(launchTarget => {
+                            if (launchTarget) {
+                                // Extract target name from the launch target path
+                                const targetName = path.basename(launchTarget, path.extname(launchTarget));
+                                this.cmakeTarget = targetName;
 
+                                vscode.commands.executeCommand<string>('cmake.buildDirectory')
+                                    .then(targetDir => {
+                                        this.cmakeBuildDirectory = targetDir;
+                                        getExecutablePath(this.cmakeBuildType, this.cmakeBuildDirectory, this.cmakeTarget)
+                                            .then(targetPath => {
+                                                if (targetPath !== null) {
+                                                    this.cmakeLaunchTargetPath = targetPath || "";
+                                                }
+                                            });
+                                    });
+                            }
                         });
-
+                    }
                 });
                 const configDoneDisposable = cmakeApi.onActiveProjectChanged((projectUri) => {
                     if (projectUri) {
