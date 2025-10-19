@@ -95,7 +95,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	if (vscode.workspace.workspaceFolders) {
         ativeWorkspace();
     }
-	
+
+	console.log('✅ cdoctest extension loaded successfully');
 }
 
 

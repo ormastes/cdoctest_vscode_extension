@@ -21,10 +21,10 @@ const configType2ControllereMap = new Map<ConfigType, string>([
 	[ConfigType.BinConfig, 'bin_test'],
 	[ConfigType.CMakeConfig, 'cmake_test']
 ]);
-const exeCtrl = vscode.tests.createTestController('exe_test', 'Cpp Executable Test');
-const cdocCtrl = vscode.tests.createTestController('cdoctest', 'codctest Test');
-const binCtrl = vscode.tests.createTestController('bin_test', 'Binary Test');
-const cmakeCtrl = vscode.tests.createTestController('cmake_test', 'CMake Test');
+const exeCtrl = vscode.tests.createTestController('exe_test', '[cdoctest] Cpp Executable Test');
+const cdocCtrl = vscode.tests.createTestController('cdoctest', '[cdoctest] CDoctest Test');
+const binCtrl = vscode.tests.createTestController('bin_test', '[cdoctest] Binary Test');
+const cmakeCtrl = vscode.tests.createTestController('cmake_test', '[cdoctest] CMake Test');
 const controllerId2ControllerMap = new Map<string, vscode.TestController>([
 	['exe_test', exeCtrl],
 	['cdoctest', cdocCtrl],

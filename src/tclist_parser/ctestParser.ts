@@ -259,6 +259,11 @@ export class CTestParser {
             }
         }
 
+        console.log(`✅ Successfully read ${ctestFiles.length} CTest file(s) and found ${result.tests.length} test case(s)`);
+        if (result.errors.length > 0) {
+            console.warn(`⚠️  ${result.errors.length} error(s) occurred while parsing CTest files`);
+        }
+
         return result;
     }
 
