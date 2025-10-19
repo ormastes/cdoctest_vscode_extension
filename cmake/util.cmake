@@ -154,9 +154,15 @@ if(\"${FRAMEWORK}\" STREQUAL \"unittest-cpp\")
       else()
         set(_abs_filename \"\${_filename}\")
       endif()
-      
+
+      # Split full test name into suite and case name
+      # Format: TestSuite::TestName
+      string(REPLACE \"::\" \";\" _test_parts \"\${_full_test_name}\")
+      list(GET _test_parts 0 _suite_name)
+      list(GET _test_parts 1 _case_name)
+
       # Write to CTest file
-      file(APPEND \"\${_ctest_file}\" \"add_test(\\\"\${_full_test_name}\\\" \\\"\${CMAKE_CURRENT_BINARY_DIR}/\${TEST_TARGET}\${CMAKE_EXECUTABLE_SUFFIX}\\\" \\\"TC/\${_full_test_name}\\\")\\n\")
+      file(APPEND \"\${_ctest_file}\" \"add_test(\\\"\${_full_test_name}\\\" \\\"\${CMAKE_CURRENT_BINARY_DIR}/\${TEST_TARGET}\${CMAKE_EXECUTABLE_SUFFIX}\\\" \\\"TC/\${_suite_name}/\${_case_name}\\\" \\\"\${_suite_name}_\${_case_name}_res.xml\\\")\\n\")
       file(APPEND \"\${_ctest_file}\" \"set_tests_properties(\\\"\${_full_test_name}\\\" PROPERTIES\\n\")
       file(APPEND \"\${_ctest_file}\" \"  WORKING_DIRECTORY \\\"\${CMAKE_CURRENT_BINARY_DIR}\\\"\\n\")
       file(APPEND \"\${_ctest_file}\" \"  TEST_FILE \\\"\${_abs_filename}\\\"\\n\")
